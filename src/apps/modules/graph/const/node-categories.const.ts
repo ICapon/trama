@@ -132,3 +132,9 @@ export const TRAMA_NODE_CATEGORIES = {
     'RiskSignal',
   ],
 } as const;
+
+export type TramaNodeCategory = keyof typeof TRAMA_NODE_CATEGORIES;
+export type TramaNodeType = (typeof TRAMA_NODE_CATEGORIES)[TramaNodeCategory][number];
+
+export const TRAMA_NODE_TYPES = Object.values(TRAMA_NODE_CATEGORIES).flat() as TramaNodeType[];
+export const TRAMA_NODE_TYPE_SET = new Set<string>(TRAMA_NODE_TYPES);
