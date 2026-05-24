@@ -7,6 +7,8 @@ import { ScraperService } from './scraper.service';
 import { ScraperProcessor } from './queue/scraper.processor';
 import { ScrapeJobService } from './scrape-job.service';
 import { ScrapeJob } from './scrape-job.entity';
+import { CurpProvider } from './providers/curp.provider';
+import { SatRfcProvider } from './providers/sat-rfc.provider';
 import { SCRAPER_QUEUE } from './queue/scraper.queue';
 import { SCRAPER_PROVIDERS_TOKEN } from './providers/provider.registry';
 
@@ -27,7 +29,13 @@ import { SCRAPER_PROVIDERS_TOKEN } from './providers/provider.registry';
     ScraperService,
     ScrapeJobService,
     ScraperProcessor,
-    { provide: SCRAPER_PROVIDERS_TOKEN, useValue: [] },
+    CurpProvider,
+    SatRfcProvider,
+    {
+      provide: SCRAPER_PROVIDERS_TOKEN,
+      useFactory: (curp: CurpProvider, sat: SatRfcProvider) => [curp, sat],
+      inject: [CurpProvider, SatRfcProvider],
+    },
   ],
   exports: [ScrapeJobService],
 })
