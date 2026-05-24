@@ -54,12 +54,30 @@ services:
       timeout: 10s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: trama_redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - trama_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
   neo4j_data:
   neo4j_logs:
   neo4j_import:
   neo4j_plugins:
+  redis_data:
 
 networks:
   trama_network:
