@@ -15,6 +15,7 @@ import {
   findNeighborsByDepthQuery,
 } from './queries/find-node.query';
 import type { CreateEntityInput, CreateRelationshipInput } from './graph.types';
+import { toGraphEdgeResponse, toGraphNodeResponse } from '../../../libs/mappers/graph.mapper';
 
 @Injectable()
 export class GraphService {
@@ -73,20 +74,21 @@ export class GraphService {
 
   async findEntityById(id: string) {
     const result = await this.neo4j.read(FIND_ENTITY_BY_ID_QUERY, { id });
-    return result.records[0]?.get('n') ?? null;
+    const raw = result.records[0]?.get('n');
+    return raw ? toGraphNodeResponse(raw) : null;
   }
 
   async findEntitiesByType(type: string) {
     this.validateNodeType(type);
     const result = await this.neo4j.read(FIND_ENTITIES_BY_TYPE_QUERY, { type });
-    return result.records.map((r) => r.get('n'));
+    return result.records.map((r) => toGraphNodeResponse(r.get('n')));
   }
 
   async findEntitiesByValue(normalizedValue: string) {
     const result = await this.neo4j.read(FIND_ENTITIES_BY_VALUE_QUERY, {
       normalizedValue,
     });
-    return result.records.map((r) => r.get('n'));
+    return result.records.map((r) => toGraphNodeResponse(r.get('n')));
   }
 
   async searchEntitiesByText(text: string, limit = 25) {
@@ -94,16 +96,23 @@ export class GraphService {
       text,
       limit,
     });
-    return result.records.map((r) => ({ node: r.get('n'), score: r.get('score') }));
+    return result.records.map((r) => ({
+      node: toGraphNodeResponse(r.get('n')),
+      score: r.get('score') as number,
+    }));
   }
 
   async findNeighbors(id: string, depth = 1) {
     const query = depth === 1 ? FIND_NEIGHBORS_QUERY : findNeighborsByDepthQuery(depth);
     const result = await this.neo4j.read(query, { id });
-    return result.records.map((r) => ({
-      neighbor: r.get('neighbor'),
-      rel: r.get('rel'),
-    }));
+    return result.records.map((r) => {
+      const neighbor = toGraphNodeResponse(r.get('neighbor'));
+      const rel = r.get('rel');
+      return {
+        neighbor,
+        edge: toGraphEdgeResponse(rel, id, neighbor.id),
+      };
+    });
   }
 
   async findShortestPath(fromId: string, toId: string) {

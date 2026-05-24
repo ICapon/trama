@@ -1,0 +1,137 @@
+{
+  "info": {
+    "name": "Trama — Investigations",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "investigationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "nodeId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create investigation",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": { "raw": "{{baseUrl}}/investigations", "host": ["{{baseUrl}}"], "path": ["investigations"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Investigación ejemplo\",\n  \"description\": \"Descripción opcional\",\n  \"priority\": \"high\",\n  \"tags\": [\"osint\", \"persona\"],\n  \"ownerId\": null\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "if (json.id) pm.collectionVariables.set('investigationId', json.id);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "List all investigations",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/investigations",
+          "host": ["{{baseUrl}}"],
+          "path": ["investigations"]
+        }
+      }
+    },
+    {
+      "name": "List investigations by owner",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/investigations?ownerId={{ownerId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["investigations"],
+          "query": [{ "key": "ownerId", "value": "{{ownerId}}" }]
+        }
+      }
+    },
+    {
+      "name": "Get investigation by ID",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/investigations/{{investigationId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["investigations", "{{investigationId}}"]
+        }
+      }
+    },
+    {
+      "name": "Update investigation",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/investigations/{{investigationId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["investigations", "{{investigationId}}"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Título actualizado\",\n  \"status\": \"in_progress\",\n  \"priority\": \"critical\",\n  \"hypothesis\": \"El sujeto tiene vínculos con la organización X\",\n  \"tags\": [\"actualizado\"]\n}"
+        }
+      }
+    },
+    {
+      "name": "Add target node",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "url": {
+          "raw": "{{baseUrl}}/investigations/{{investigationId}}/targets",
+          "host": ["{{baseUrl}}"],
+          "path": ["investigations", "{{investigationId}}", "targets"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nodeId\": \"{{nodeId}}\",\n  \"nodeLabel\": \"Juan Pérez\",\n  \"nodeType\": \"Person\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Remove target node",
+      "request": {
+        "method": "DELETE",
+        "url": {
+          "raw": "{{baseUrl}}/investigations/{{investigationId}}/targets/{{nodeId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["investigations", "{{investigationId}}", "targets", "{{nodeId}}"]
+        }
+      }
+    },
+    {
+      "name": "Delete investigation",
+      "request": {
+        "method": "DELETE",
+        "url": {
+          "raw": "{{baseUrl}}/investigations/{{investigationId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["investigations", "{{investigationId}}"]
+        }
+      }
+    }
+  ]
+}
