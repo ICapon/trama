@@ -1,9 +1,24 @@
+export const PERSON_RELATIONSHIP_TYPES = [
+  'PARENT_OF',
+  'SIBLING_OF',
+  'SPOUSE_OF',
+  'PARTNER_OF',
+  'FRIEND_OF',
+  'EMPLOYER_OF',
+  'KNOWN_ASSOCIATE_OF',
+] as const;
+
+export type PersonRelationshipType = (typeof PERSON_RELATIONSHIP_TYPES)[number];
+
 export const TRAMA_RELATIONSHIP_TYPES = [
   // Generic
   'RELATED_TO',
   'ASSOCIATED_WITH',
   'SAME_AS',
   'POSSIBLY_SAME_AS',
+
+  // Person → Person
+  ...PERSON_RELATIONSHIP_TYPES,
 
   // Identity
   'HAS_ALIAS',

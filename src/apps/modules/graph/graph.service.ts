@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Neo4jService } from '../neo4j/neo4j.service';
 import { TRAMA_NODE_TYPE_SET } from './const/node-categories.const';
 import { TRAMA_RELATIONSHIP_TYPE_SET } from './const/relationship-types.const';
 import { createEntityNodeQuery } from './queries/create-node.query';
 import { createRelationshipQuery } from './queries/create-relationship.query';
+import { DELETE_NODE_QUERY } from './queries/delete-node.query';
 import {
   FIND_ENTITIES_BY_TYPE_QUERY,
   FIND_ENTITIES_BY_VALUE_QUERY,
@@ -108,5 +109,12 @@ export class GraphService {
   async findShortestPath(fromId: string, toId: string) {
     const result = await this.neo4j.read(FIND_SHORTEST_PATH_QUERY, { fromId, toId });
     return result.records[0]?.get('p') ?? null;
+  }
+
+  async removeNode(id: string) {
+    const result = await this.neo4j.write(DELETE_NODE_QUERY, { id });
+    if (!result.records[0]) {
+      throw new NotFoundException(`Node ${id} not found`);
+    }
   }
 }
