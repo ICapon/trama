@@ -1,0 +1,191 @@
+{
+  "info": {
+    "name": "Trama — Scraper API",
+    "_postman_id": "trama-scraper-v1",
+    "description": "Endpoints del módulo scraper: lanzar jobs, consultar estado y ver providers disponibles.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "personId",
+      "value": "reemplaza-con-uuid-de-persona",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "reemplaza-con-uuid-del-job",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Providers",
+      "item": [
+        {
+          "name": "Listar providers disponibles",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/scraper/providers",
+              "host": ["{{baseUrl}}"],
+              "path": ["scraper", "providers"]
+            },
+            "description": "Retorna todos los providers registrados con su nombre (source) y descripción."
+          },
+          "response": [
+            {
+              "name": "Ejemplo respuesta",
+              "status": "OK",
+              "code": 200,
+              "body": "[\n  { \"source\": \"curp-renapo\", \"description\": \"Consulta CURP en RENAPO — valida y enriquece datos de identidad\" },\n  { \"source\": \"sat-rfc\", \"description\": \"Consulta RFC en el SAT — validación y situación fiscal\" }\n]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "item": [
+        {
+          "name": "Lanzar scrape — todos los providers",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/scraper/person/{{personId}}/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["scraper", "person", "{{personId}}", "run"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"seed\": {\n    \"curp\": \"GACJ900101HDFRZN09\",\n    \"rfc\": \"GACJ900101AB3\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Lanza un job por cada provider capaz de manejar el seed. El seed se combina con los datos ya existentes en Neo4j para esa persona."
+          },
+          "response": [
+            {
+              "name": "Ejemplo respuesta",
+              "status": "Created",
+              "code": 201,
+              "body": "{\n  \"jobs\": [\n    { \"id\": \"uuid-postgres-job-1\", \"source\": \"curp-renapo\", \"bullJobId\": \"1\" },\n    { \"id\": \"uuid-postgres-job-2\", \"source\": \"sat-rfc\", \"bullJobId\": \"2\" }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Lanzar scrape — provider específico",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/scraper/person/{{personId}}/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["scraper", "person", "{{personId}}", "run"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sources\": [\"curp-renapo\"],\n  \"seed\": {\n    \"curp\": \"GACJ900101HDFRZN09\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Igual que el anterior pero filtrando a un solo provider por su 'source'."
+          }
+        },
+        {
+          "name": "Lanzar scrape — solo RFC",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/scraper/person/{{personId}}/run",
+              "host": ["{{baseUrl}}"],
+              "path": ["scraper", "person", "{{personId}}", "run"]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sources\": [\"sat-rfc\"],\n  \"seed\": {\n    \"rfc\": \"GACJ900101AB3\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Ver estado de un job",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/scraper/jobs/{{jobId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["scraper", "jobs", "{{jobId}}"]
+            },
+            "description": "Consulta el estado de un job por su UUID de Postgres. El 'id' viene en la respuesta del POST /run."
+          },
+          "response": [
+            {
+              "name": "Ejemplo — completado",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"uuid-postgres-job-1\",\n  \"personId\": \"uuid-de-la-persona\",\n  \"source\": \"curp-renapo\",\n  \"status\": \"completed\",\n  \"seed\": { \"curp\": \"GACJ900101HDFRZN09\" },\n  \"createdNodeIds\": [\"uuid-curp-node\", \"uuid-address-node\"],\n  \"rawResult\": { \"curp\": \"GACJ900101HDFRZN09\", \"nombres\": \"JUAN\", \"primerApellido\": \"GARCIA\" },\n  \"errorMessage\": null,\n  \"bullJobId\": \"1\",\n  \"neo4jScrapeResultId\": \"uuid-neo4j-scrape-result\",\n  \"startedAt\": \"2026-05-24T10:00:00.000Z\",\n  \"finishedAt\": \"2026-05-24T10:00:02.500Z\",\n  \"createdAt\": \"2026-05-24T10:00:00.000Z\",\n  \"updatedAt\": \"2026-05-24T10:00:02.500Z\"\n}"
+            },
+            {
+              "name": "Ejemplo — fallido",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"id\": \"uuid-postgres-job-1\",\n  \"source\": \"curp-renapo\",\n  \"status\": \"failed\",\n  \"errorMessage\": \"RENAPO responded with status 503\",\n  \"createdNodeIds\": [],\n  \"startedAt\": \"2026-05-24T10:00:00.000Z\",\n  \"finishedAt\": \"2026-05-24T10:00:01.200Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Ver todos los jobs de una persona",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/scraper/person/{{personId}}/jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["scraper", "person", "{{personId}}", "jobs"]
+            },
+            "description": "Lista todos los scrape jobs de una persona ordenados por fecha descendente."
+          },
+          "response": [
+            {
+              "name": "Ejemplo respuesta",
+              "status": "OK",
+              "code": 200,
+              "body": "[\n  {\n    \"id\": \"uuid-job-1\",\n    \"personId\": \"uuid-persona\",\n    \"source\": \"curp-renapo\",\n    \"status\": \"completed\",\n    \"createdNodeIds\": [\"uuid-curp\", \"uuid-address\"],\n    \"startedAt\": \"2026-05-24T10:00:00.000Z\",\n    \"finishedAt\": \"2026-05-24T10:00:02.500Z\"\n  },\n  {\n    \"id\": \"uuid-job-2\",\n    \"personId\": \"uuid-persona\",\n    \"source\": \"sat-rfc\",\n    \"status\": \"completed\",\n    \"createdNodeIds\": [\"uuid-rfc\", \"uuid-taxstatus\"],\n    \"startedAt\": \"2026-05-24T10:00:00.000Z\",\n    \"finishedAt\": \"2026-05-24T10:00:03.100Z\"\n  }\n]"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

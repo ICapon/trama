@@ -6,6 +6,17 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+export interface InvestigationViewState {
+  graph?: {
+    pinnedPositions?: Record<string, { fx: number; fy: number; fz: number }>;
+    bookmarkedNodeIds?: string[];
+    hiddenNodeIds?: string[];
+    depth?: number;
+  };
+  notes?: Record<string, string>; // nodeId → analyst note
+  lastSelectedNodeId?: string;
+}
+
 export enum InvestigationStatus {
   OPEN = 'open',
   IN_PROGRESS = 'in_progress',
@@ -65,6 +76,9 @@ export class Investigation {
   // Will be linked to a User entity once auth is implemented
   @Column({ nullable: true, type: 'uuid' })
   ownerId: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  viewState: InvestigationViewState | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;

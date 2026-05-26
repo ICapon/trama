@@ -31,10 +31,13 @@ export const FIND_NEIGHBORS_QUERY = `
 `;
 
 // Depth is clamped 1–5 and interpolated as a safe integer by GraphService.
+// Uses OPTIONAL MATCH for the direct edge so rel is a single Relationship (or null),
+// not the list that [rel*1..n] variable-length paths would return.
 export function findNeighborsByDepthQuery(depth: number): string {
   const d = Math.min(Math.max(1, Math.trunc(depth)), 5);
   return `
-    MATCH (n:Entity { id: $id })-[rel*1..${d}]-(neighbor:Entity)
+    MATCH (n:Entity { id: $id })-[*1..${d}]-(neighbor:Entity)
+    OPTIONAL MATCH (n)-[rel]-(neighbor)
     RETURN DISTINCT neighbor, rel
     LIMIT 100
   `;
@@ -44,4 +47,12 @@ export const FIND_SHORTEST_PATH_QUERY = `
   MATCH (from:Entity { id: $fromId }), (to:Entity { id: $toId })
   MATCH p = shortestPath((from)-[*..10]-(to))
   RETURN p
+`;
+
+// Returns each root node with its direct neighbors and the connecting relationship.
+// Use findGraphByNodeIds() in GraphService to deduplicate and map the results.
+export const FIND_GRAPH_BY_NODE_IDS_QUERY = `
+  MATCH (n:Entity) WHERE n.id IN $ids
+  OPTIONAL MATCH (n)-[r]-(neighbor:Entity)
+  RETURN n, r, neighbor
 `;

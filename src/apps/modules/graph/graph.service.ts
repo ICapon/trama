@@ -1,5 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { ArrayContains, Repository } from 'typeorm';
+import type { Node, Relationship } from 'neo4j-driver';
 import { Neo4jService } from '../neo4j/neo4j.service';
+import { Investigation } from '../investigation/investigation.entity';
 import { TRAMA_NODE_TYPE_SET } from './const/node-categories.const';
 import { TRAMA_RELATIONSHIP_TYPE_SET } from './const/relationship-types.const';
 import { createEntityNodeQuery } from './queries/create-node.query';
@@ -9,6 +13,7 @@ import {
   FIND_ENTITIES_BY_TYPE_QUERY,
   FIND_ENTITIES_BY_VALUE_QUERY,
   FIND_ENTITY_BY_ID_QUERY,
+  FIND_GRAPH_BY_NODE_IDS_QUERY,
   FIND_NEIGHBORS_QUERY,
   FIND_SHORTEST_PATH_QUERY,
   SEARCH_ENTITIES_BY_TEXT_QUERY,
@@ -16,10 +21,15 @@ import {
 } from './queries/find-node.query';
 import type { CreateEntityInput, CreateRelationshipInput } from './graph.types';
 import { toGraphEdgeResponse, toGraphNodeResponse } from '../../../libs/mappers/graph.mapper';
+import type { GraphEdgeResponse, GraphNodeResponse } from '../../../libs/schemas/graph-node-response.schema';
 
 @Injectable()
 export class GraphService {
-  constructor(private readonly neo4j: Neo4jService) {}
+  constructor(
+    private readonly neo4j: Neo4jService,
+    @InjectRepository(Investigation)
+    private readonly investigationRepo: Repository<Investigation>,
+  ) {}
 
   validateNodeType(type: string): void {
     if (!TRAMA_NODE_TYPE_SET.has(type)) {
@@ -110,7 +120,7 @@ export class GraphService {
       const rel = r.get('rel');
       return {
         neighbor,
-        edge: toGraphEdgeResponse(rel, id, neighbor.id),
+        edge: rel ? toGraphEdgeResponse(rel, id, neighbor.id) : null,
       };
     });
   }
@@ -120,10 +130,59 @@ export class GraphService {
     return result.records[0]?.get('p') ?? null;
   }
 
+  async findGraphByNodeIds(ids: string[]): Promise<{ nodes: GraphNodeResponse[]; edges: GraphEdgeResponse[] }> {
+    if (!ids.length) return { nodes: [], edges: [] };
+
+    const result = await this.neo4j.read(FIND_GRAPH_BY_NODE_IDS_QUERY, { ids });
+
+    const nodeMap = new Map<string, GraphNodeResponse>();
+    const edgeMap = new Map<string, GraphEdgeResponse>();
+
+    for (const record of result.records) {
+      const rawN = record.get('n') as Node;
+      const rawR = record.get('r') as Relationship | null;
+      const rawNeighbor = record.get('neighbor') as Node | null;
+
+      const n = toGraphNodeResponse(rawN);
+      nodeMap.set(n.id, n);
+
+      if (rawR && rawNeighbor) {
+        const neighbor = toGraphNodeResponse(rawNeighbor);
+        if (!neighbor.id) continue;
+        nodeMap.set(neighbor.id, neighbor);
+
+        const fromId = rawR.startNodeElementId === rawN.elementId ? n.id : neighbor.id;
+        const toId = rawR.startNodeElementId === rawN.elementId ? neighbor.id : n.id;
+        const edge = toGraphEdgeResponse(rawR, fromId, toId);
+        edgeMap.set(edge.id, edge);
+      }
+    }
+
+    // Drop edges that reference a node not in the map (avoids reagraph null-key errors).
+    const validEdges = [...edgeMap.values()].filter(
+      (e) => nodeMap.has(e.source) && nodeMap.has(e.target),
+    );
+
+    return { nodes: [...nodeMap.values()], edges: validEdges };
+  }
+
   async removeNode(id: string) {
     const result = await this.neo4j.write(DELETE_NODE_QUERY, { id });
     if (!result.records[0]) {
       throw new NotFoundException(`Node ${id} not found`);
     }
+
+    const affected = await this.investigationRepo.find({
+      where: { targetNodeIds: ArrayContains([id]) },
+    });
+
+    for (const inv of affected) {
+      const idx = inv.targetNodeIds.indexOf(id);
+      inv.targetNodeIds = inv.targetNodeIds.filter((_, i) => i !== idx);
+      inv.targetNodeLabels = inv.targetNodeLabels.filter((_, i) => i !== idx);
+      inv.targetNodeTypes = inv.targetNodeTypes.filter((_, i) => i !== idx);
+    }
+
+    if (affected.length) await this.investigationRepo.save(affected);
   }
 }
