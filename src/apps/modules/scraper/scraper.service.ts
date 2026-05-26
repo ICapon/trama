@@ -1,8 +1,9 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { GraphService } from '../graph/graph.service';
 import { ScrapeJobService } from './scrape-job.service';
+import { ProviderService } from '../provider/provider.service';
 import { SCRAPER_QUEUE, SCRAPE_PERSON_JOB } from './queue/scraper.queue';
 import { TramaProvider } from '../../../libs/providers';
 import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
@@ -10,13 +11,18 @@ import type { RunScrapeDto } from '../../../libs/schemas/scraper.schema';
 import type { ScrapeJobPayload } from './scraper.types';
 
 @Injectable()
-export class ScraperService {
+export class ScraperService implements OnModuleInit {
   constructor(
     @InjectQueue(SCRAPER_QUEUE) private readonly queue: Queue<ScrapeJobPayload>,
     @Inject(TRAMA_PROVIDERS_TOKEN) private readonly providers: TramaProvider[],
     private readonly graph: GraphService,
     private readonly scrapeJobService: ScrapeJobService,
+    private readonly providerService: ProviderService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    await this.providerService.syncFromCode(this.providers);
+  }
 
   async runForPerson(personId: string, dto: RunScrapeDto) {
     const person = await this.graph.findEntityById(personId);

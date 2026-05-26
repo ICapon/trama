@@ -4,6 +4,7 @@ import { Job } from 'bullmq';
 import { randomUUID } from 'crypto';
 import { GraphService } from '../../graph/graph.service';
 import { ScrapeJobService } from '../scrape-job.service';
+import { ProviderService } from '../../provider/provider.service';
 import { SCRAPER_QUEUE, SCRAPE_PERSON_JOB } from './scraper.queue';
 import { TramaProvider } from '../../../../libs/providers';
 import { TRAMA_PROVIDERS_TOKEN } from '../providers/provider.registry';
@@ -18,6 +19,7 @@ export class ScraperProcessor extends WorkerHost {
     private readonly providers: TramaProvider[],
     private readonly graph: GraphService,
     private readonly scrapeJobService: ScrapeJobService,
+    private readonly providerService: ProviderService,
   ) {
     super();
   }
@@ -36,6 +38,7 @@ export class ScraperProcessor extends WorkerHost {
 
     this.logger.log(`[${source}] Starting scrape for person ${personId}`);
 
+    const startedAt = Date.now();
     const scrapeResultId = randomUUID();
     const now = new Date().toISOString();
 
@@ -83,6 +86,7 @@ export class ScraperProcessor extends WorkerHost {
 
       const createdNodeIds = result.nodes.map((n) => n.id);
       await this.scrapeJobService.markCompleted(scrapeJobId, createdNodeIds, result.rawData);
+      await this.providerService.recordRun(source, true, Date.now() - startedAt);
 
       this.logger.log(
         `[${source}] Done — ${result.nodes.length} nodes, ${result.relationships.length} rels`,
@@ -103,6 +107,7 @@ export class ScraperProcessor extends WorkerHost {
       });
 
       await this.scrapeJobService.markFailed(scrapeJobId, errorMessage);
+      await this.providerService.recordRun(source, false, Date.now() - startedAt, errorMessage);
       this.logger.error(`[${source}] Scrape failed for person ${personId}`, error);
       throw error;
     }

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GraphModule } from '../graph/graph.module';
+import { ProviderModule } from '../provider/provider.module';
 import { ScraperController } from './scraper.controller';
 import { ScraperService } from './scraper.service';
 import { ScraperProcessor } from './queue/scraper.processor';
@@ -23,6 +24,7 @@ import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
     BullModule.registerQueue({ name: SCRAPER_QUEUE }),
     TypeOrmModule.forFeature([ScrapeJob]),
     GraphModule,
+    ProviderModule,
   ],
   controllers: [ScraperController],
   providers: [
