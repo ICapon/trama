@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ScrapeJob, ScrapeJobStatus } from './scrape-job.entity';
-import type { ScrapeSeedData } from './scraper.types';
+import type { TramaProviderSeed } from '../../../libs/providers';
 
 @Injectable()
 export class ScrapeJobService {
@@ -11,7 +11,7 @@ export class ScrapeJobService {
     private readonly repo: Repository<ScrapeJob>,
   ) {}
 
-  create(data: { personId: string; source: string; seed: ScrapeSeedData }): Promise<ScrapeJob> {
+  create(data: { personId: string; source: string; seed: TramaProviderSeed }): Promise<ScrapeJob> {
     const job = this.repo.create({ ...data, status: ScrapeJobStatus.PENDING });
     return this.repo.save(job);
   }

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { BaseScraperProvider } from './base.provider';
-import type { ScrapeSeedData, ScrapeProviderResult } from '../scraper.types';
+import { TramaProvider, TramaProviderCategory } from '../../../../libs/providers';
+import type { TramaProviderContext, TramaProviderResult, TramaProviderSeed, TramaNodeType, MxSeed } from '../../../../libs/providers';
 
 interface RenapoResponse {
   curp?: string;
@@ -31,15 +31,22 @@ const CURP_STATE_CODES: Record<string, string> = {
 const GENDER_MAP: Record<string, string> = { H: 'male', M: 'female' };
 
 @Injectable()
-export class CurpProvider extends BaseScraperProvider {
+export class CurpProvider extends TramaProvider {
   readonly source = 'curp-renapo';
+  readonly name = 'CURP / RENAPO';
   readonly description = 'Decodifica CURP localmente + intenta enriquecer vía RENAPO';
+  readonly category = TramaProviderCategory.IDENTITY;
+  readonly countries = ['MX'];
+  readonly supportedInputs: string[] = ['curp'];
+  readonly outputNodeTypes: TramaNodeType[] = ['CURP', 'Address'];
+
   private readonly logger = new Logger(CurpProvider.name);
   private readonly apiUrl =
     process.env.RENAPO_API_URL ?? 'https://consultas.curp.gob.mx/CurpSP/gobmx/curp';
 
-  canHandle(seed: ScrapeSeedData): boolean {
-    return !!seed.curp && /^[A-Z]{4}\d{6}[HM][A-Z]{5}[0-9A-Z]\d$/.test(seed.curp.toUpperCase().trim());
+  canHandle(seed: TramaProviderSeed): boolean {
+    const { curp } = seed as MxSeed;
+    return !!curp && /^[A-Z]{4}\d{6}[HM][A-Z]{5}[0-9A-Z]\d$/.test(curp.toUpperCase().trim());
   }
 
   // Decodifica los campos que el CURP lleva codificados en su estructura.
@@ -91,7 +98,9 @@ export class CurpProvider extends BaseScraperProvider {
     }
   }
 
-  async execute(personId: string, seed: ScrapeSeedData): Promise<ScrapeProviderResult> {
+  async execute(ctx: TramaProviderContext): Promise<TramaProviderResult> {
+    const { entityId } = ctx;
+    const seed = ctx.seed as MxSeed;
     const curp = seed.curp!.toUpperCase().trim();
     const now = new Date().toISOString();
 
@@ -103,8 +112,8 @@ export class CurpProvider extends BaseScraperProvider {
     this.logger.debug(`CURP data para ${curp}: ${JSON.stringify(data)}`);
 
     const curpNodeId = randomUUID();
-    const nodes: ScrapeProviderResult['nodes'] = [];
-    const relationships: ScrapeProviderResult['relationships'] = [];
+    const nodes: TramaProviderResult['nodes'] = [];
+    const relationships: TramaProviderResult['relationships'] = [];
 
     const enriched: Record<string, unknown> = {};
     if (data.nombres) enriched['firstName'] = data.nombres;
@@ -132,7 +141,7 @@ export class CurpProvider extends BaseScraperProvider {
       },
     });
 
-    relationships.push({ fromId: personId, toId: curpNodeId, type: 'HAS_CURP' });
+    relationships.push({ fromId: entityId, toId: curpNodeId, type: 'HAS_CURP' });
 
     if (data.entidadNacimiento) {
       const addressId = randomUUID();
@@ -149,7 +158,7 @@ export class CurpProvider extends BaseScraperProvider {
           createdAt: now,
         },
       });
-      relationships.push({ fromId: personId, toId: addressId, type: 'LIVES_AT' });
+      relationships.push({ fromId: entityId, toId: addressId, type: 'LIVES_AT' });
     }
 
     return { nodes, relationships, rawData: data };

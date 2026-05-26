@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { BaseScraperProvider } from './base.provider';
-import type { ScrapeSeedData, ScrapeProviderResult } from '../scraper.types';
+import { TramaProvider, TramaProviderCategory } from '../../../../libs/providers';
+import type { TramaProviderContext, TramaProviderResult, TramaProviderSeed, TramaNodeType, MxSeed } from '../../../../libs/providers';
 
 interface SatContribuyenteResponse {
   rfc?: string;
@@ -13,18 +13,27 @@ interface SatContribuyenteResponse {
 }
 
 @Injectable()
-export class SatRfcProvider extends BaseScraperProvider {
+export class SatRfcProvider extends TramaProvider {
   readonly source = 'sat-rfc';
+  readonly name = 'SAT RFC';
   readonly description = 'Consulta RFC en el SAT — validación y situación fiscal';
+  readonly category = TramaProviderCategory.FINANCIAL;
+  readonly countries = ['MX'];
+  readonly supportedInputs: string[] = ['rfc'];
+  readonly outputNodeTypes: TramaNodeType[] = ['RFC', 'TaxStatus'];
+
   private readonly logger = new Logger(SatRfcProvider.name);
   private readonly apiUrl =
     process.env.SAT_API_URL ?? 'https://apisnet.col.gob.mx/apiSAT/v1/contribuyente';
 
-  canHandle(seed: ScrapeSeedData): boolean {
-    return !!seed.rfc && this.isValidRfcFormat(seed.rfc);
+  canHandle(seed: TramaProviderSeed): boolean {
+    const { rfc } = seed as MxSeed;
+    return !!rfc && this.isValidRfcFormat(rfc);
   }
 
-  async execute(personId: string, seed: ScrapeSeedData): Promise<ScrapeProviderResult> {
+  async execute(ctx: TramaProviderContext): Promise<TramaProviderResult> {
+    const { entityId } = ctx;
+    const seed = ctx.seed as MxSeed;
     const rfc = seed.rfc!.toUpperCase().trim();
 
     const response = await fetch(`${this.apiUrl}/${encodeURIComponent(rfc)}`, {
@@ -43,10 +52,9 @@ export class SatRfcProvider extends BaseScraperProvider {
 
     const now = new Date().toISOString();
     const rfcNodeId = randomUUID();
-    const nodes: ScrapeProviderResult['nodes'] = [];
-    const relationships: ScrapeProviderResult['relationships'] = [];
+    const nodes: TramaProviderResult['nodes'] = [];
+    const relationships: TramaProviderResult['relationships'] = [];
 
-    // RFC node
     nodes.push({
       id: rfcNodeId,
       type: 'RFC',
@@ -62,9 +70,8 @@ export class SatRfcProvider extends BaseScraperProvider {
       },
     });
 
-    relationships.push({ fromId: personId, toId: rfcNodeId, type: 'HAS_RFC' });
+    relationships.push({ fromId: entityId, toId: rfcNodeId, type: 'HAS_RFC' });
 
-    // TaxStatus node
     if (data.situacionContribuyente) {
       const taxStatusId = randomUUID();
       const isActive = data.situacionContribuyente.toLowerCase().includes('activo');

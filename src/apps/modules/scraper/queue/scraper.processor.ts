@@ -5,8 +5,8 @@ import { randomUUID } from 'crypto';
 import { GraphService } from '../../graph/graph.service';
 import { ScrapeJobService } from '../scrape-job.service';
 import { SCRAPER_QUEUE, SCRAPE_PERSON_JOB } from './scraper.queue';
-import { BaseScraperProvider } from '../providers/base.provider';
-import { SCRAPER_PROVIDERS_TOKEN } from '../providers/provider.registry';
+import { TramaProvider } from '../../../../libs/providers';
+import { TRAMA_PROVIDERS_TOKEN } from '../providers/provider.registry';
 import type { ScrapeJobPayload } from '../scraper.types';
 
 @Processor(SCRAPER_QUEUE)
@@ -14,8 +14,8 @@ export class ScraperProcessor extends WorkerHost {
   private readonly logger = new Logger(ScraperProcessor.name);
 
   constructor(
-    @Inject(SCRAPER_PROVIDERS_TOKEN)
-    private readonly providers: BaseScraperProvider[],
+    @Inject(TRAMA_PROVIDERS_TOKEN)
+    private readonly providers: TramaProvider[],
     private readonly graph: GraphService,
     private readonly scrapeJobService: ScrapeJobService,
   ) {
@@ -54,7 +54,7 @@ export class ScraperProcessor extends WorkerHost {
     await this.scrapeJobService.markRunning(scrapeJobId, job.id!, scrapeResultId);
 
     try {
-      const result = await provider.execute(personId, seed);
+      const result = await provider.execute({ entityId: personId, entityType: 'Person', seed });
 
       for (const node of result.nodes) {
         await this.graph.createEntity(node);

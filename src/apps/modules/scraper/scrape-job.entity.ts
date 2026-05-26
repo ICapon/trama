@@ -5,7 +5,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import type { ScrapeSeedData } from './scraper.types';
+import type { TramaProviderSeed } from '../../../libs/providers';
 
 export enum ScrapeJobStatus {
   PENDING = 'pending',
@@ -29,7 +29,7 @@ export class ScrapeJob {
   status: ScrapeJobStatus;
 
   @Column({ type: 'jsonb' })
-  seed: ScrapeSeedData;
+  seed: TramaProviderSeed;
 
   @Column({ type: 'jsonb', nullable: true })
   rawResult: unknown | null;

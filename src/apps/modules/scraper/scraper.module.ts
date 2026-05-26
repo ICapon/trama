@@ -10,7 +10,7 @@ import { ScrapeJob } from './scrape-job.entity';
 import { CurpProvider } from './providers/curp.provider';
 import { SatRfcProvider } from './providers/sat-rfc.provider';
 import { SCRAPER_QUEUE } from './queue/scraper.queue';
-import { SCRAPER_PROVIDERS_TOKEN } from './providers/provider.registry';
+import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
 
 @Module({
   imports: [
@@ -32,7 +32,7 @@ import { SCRAPER_PROVIDERS_TOKEN } from './providers/provider.registry';
     CurpProvider,
     SatRfcProvider,
     {
-      provide: SCRAPER_PROVIDERS_TOKEN,
+      provide: TRAMA_PROVIDERS_TOKEN,
       useFactory: (curp: CurpProvider, sat: SatRfcProvider) => [curp, sat],
       inject: [CurpProvider, SatRfcProvider],
     },

@@ -4,8 +4,8 @@ import { Queue } from 'bullmq';
 import { GraphService } from '../graph/graph.service';
 import { ScrapeJobService } from './scrape-job.service';
 import { SCRAPER_QUEUE, SCRAPE_PERSON_JOB } from './queue/scraper.queue';
-import { BaseScraperProvider } from './providers/base.provider';
-import { SCRAPER_PROVIDERS_TOKEN } from './providers/provider.registry';
+import { TramaProvider } from '../../../libs/providers';
+import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
 import type { RunScrapeDto } from '../../../libs/schemas/scraper.schema';
 import type { ScrapeJobPayload } from './scraper.types';
 
@@ -13,7 +13,7 @@ import type { ScrapeJobPayload } from './scraper.types';
 export class ScraperService {
   constructor(
     @InjectQueue(SCRAPER_QUEUE) private readonly queue: Queue<ScrapeJobPayload>,
-    @Inject(SCRAPER_PROVIDERS_TOKEN) private readonly providers: BaseScraperProvider[],
+    @Inject(TRAMA_PROVIDERS_TOKEN) private readonly providers: TramaProvider[],
     private readonly graph: GraphService,
     private readonly scrapeJobService: ScrapeJobService,
   ) {}
