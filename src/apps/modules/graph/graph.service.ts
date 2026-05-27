@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ArrayContains, Repository } from 'typeorm';
+import { ArrayContains, In, Repository } from 'typeorm';
 import type { Node, Relationship } from 'neo4j-driver';
 import { Neo4jService } from '../neo4j/neo4j.service';
 import { Investigation } from '../investigation/investigation.entity';
+import { Upload } from '../upload/upload.entity';
 import { TRAMA_NODE_TYPE_SET } from './const/node-categories.const';
 import { TRAMA_RELATIONSHIP_TYPE_SET } from './const/relationship-types.const';
 import { createEntityNodeQuery } from './queries/create-node.query';
@@ -32,7 +33,25 @@ export class GraphService {
     private readonly neo4j: Neo4jService,
     @InjectRepository(Investigation)
     private readonly investigationRepo: Repository<Investigation>,
+    @InjectRepository(Upload)
+    private readonly uploadRepo: Repository<Upload>,
   ) {}
+
+  private async enrichWithUploads(nodes: GraphNodeResponse[]): Promise<GraphNodeResponse[]> {
+    const uploadIds = nodes
+      .map((n) => n.properties.uploadId as string | undefined)
+      .filter((id): id is string => !!id);
+
+    if (!uploadIds.length) return nodes;
+
+    const uploads = await this.uploadRepo.findBy({ id: In(uploadIds) });
+    const urlMap = new Map(uploads.map((u) => [u.id, u.url]));
+
+    return nodes.map((n) => {
+      const uploadId = n.properties.uploadId as string | undefined;
+      return uploadId ? { ...n, uploadUrl: urlMap.get(uploadId) } : n;
+    });
+  }
 
   validateNodeType(type: string): void {
     if (!TRAMA_NODE_TYPE_SET.has(type)) {
@@ -86,12 +105,12 @@ export class GraphService {
     const fromNode = toGraphNodeResponse(record.get('from'));
     const toNode   = toGraphNodeResponse(record.get('to'));
     const edge     = toGraphEdgeResponse(record.get('r'), fromNode.id, toNode.id);
+    const [enrichedFrom, enrichedTo] = await this.enrichWithUploads([fromNode, toNode]);
 
-    return { nodes: [fromNode, toNode], edge };
+    return { nodes: [enrichedFrom, enrichedTo], edge };
   }
 
   async updateEntity(id: string, properties: Record<string, unknown>) {
-    // Prevent overwriting immutable fields
     const { id: _id, type: _type, createdAt: _ca, ...safe } = properties;
 
     const result = await this.neo4j.write(UPDATE_NODE_QUERY, {
@@ -102,50 +121,51 @@ export class GraphService {
 
     const raw = result.records[0]?.get('n');
     if (!raw) throw new NotFoundException(`Node ${id} not found`);
-    return toGraphNodeResponse(raw);
+    const [node] = await this.enrichWithUploads([toGraphNodeResponse(raw)]);
+    return node;
   }
 
   async findEntityById(id: string) {
     const result = await this.neo4j.read(FIND_ENTITY_BY_ID_QUERY, { id });
     const raw = result.records[0]?.get('n');
-    return raw ? toGraphNodeResponse(raw) : null;
+    if (!raw) return null;
+    const [node] = await this.enrichWithUploads([toGraphNodeResponse(raw)]);
+    return node;
   }
 
   async findEntitiesByType(type: string) {
     this.validateNodeType(type);
     const result = await this.neo4j.read(FIND_ENTITIES_BY_TYPE_QUERY, { type });
-    return result.records.map((r) => toGraphNodeResponse(r.get('n')));
+    const nodes = result.records.map((r) => toGraphNodeResponse(r.get('n')));
+    return this.enrichWithUploads(nodes);
   }
 
   async findEntitiesByValue(normalizedValue: string) {
-    const result = await this.neo4j.read(FIND_ENTITIES_BY_VALUE_QUERY, {
-      normalizedValue,
-    });
-    return result.records.map((r) => toGraphNodeResponse(r.get('n')));
+    const result = await this.neo4j.read(FIND_ENTITIES_BY_VALUE_QUERY, { normalizedValue });
+    const nodes = result.records.map((r) => toGraphNodeResponse(r.get('n')));
+    return this.enrichWithUploads(nodes);
   }
 
   async searchEntitiesByText(text: string, limit = 25) {
-    const result = await this.neo4j.read(SEARCH_ENTITIES_BY_TEXT_QUERY, {
-      text,
-      limit,
-    });
-    return result.records.map((r) => ({
+    const result = await this.neo4j.read(SEARCH_ENTITIES_BY_TEXT_QUERY, { text, limit });
+    const raw = result.records.map((r) => ({
       node: toGraphNodeResponse(r.get('n')),
       score: r.get('score') as number,
     }));
+    const enriched = await this.enrichWithUploads(raw.map((r) => r.node));
+    return raw.map((r, i) => ({ node: enriched[i], score: r.score }));
   }
 
   async findNeighbors(id: string, depth = 1) {
     const query = depth === 1 ? FIND_NEIGHBORS_QUERY : findNeighborsByDepthQuery(depth);
     const result = await this.neo4j.read(query, { id });
-    return result.records.map((r) => {
+    const raw = result.records.map((r) => {
       const neighbor = toGraphNodeResponse(r.get('neighbor'));
       const rel = r.get('rel');
-      return {
-        neighbor,
-        edge: rel ? toGraphEdgeResponse(rel, id, neighbor.id) : null,
-      };
+      return { neighbor, edge: rel ? toGraphEdgeResponse(rel, id, neighbor.id) : null };
     });
+    const enriched = await this.enrichWithUploads(raw.map((r) => r.neighbor));
+    return raw.map((r, i) => ({ neighbor: enriched[i], edge: r.edge }));
   }
 
   async findShortestPath(fromId: string, toId: string) {
@@ -186,7 +206,8 @@ export class GraphService {
       (e) => nodeMap.has(e.source) && nodeMap.has(e.target),
     );
 
-    return { nodes: [...nodeMap.values()], edges: validEdges };
+    const enrichedNodes = await this.enrichWithUploads([...nodeMap.values()]);
+    return { nodes: enrichedNodes, edges: validEdges };
   }
 
   async findRelationships(id: string, relType?: string): Promise<GraphEdgeResponse[]> {

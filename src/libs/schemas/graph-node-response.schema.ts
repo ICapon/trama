@@ -16,6 +16,7 @@ export const GraphNodeResponseSchema = z.object({
   category: z.enum(NODE_CATEGORY_KEYS),
   label: z.string(),
   properties: z.record(z.string(), z.unknown()),
+  uploadUrl: z.string().url().optional(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
 });
