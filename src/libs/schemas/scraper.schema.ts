@@ -13,6 +13,7 @@ export const ScrapeSeedSchema = z.object({
 });
 
 export const RunScrapeSchema = z.object({
+  investigationId: z.string().uuid(),
   sources: z.array(z.string()).optional(),
   seed: ScrapeSeedSchema.optional(),
 });

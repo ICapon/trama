@@ -7,7 +7,9 @@ import { ScraperController } from './scraper.controller';
 import { ScraperService } from './scraper.service';
 import { ScraperProcessor } from './queue/scraper.processor';
 import { ScrapeJobService } from './scrape-job.service';
+import { ScrapeResultService } from './scrape-result.service';
 import { ScrapeJob } from './scrape-job.entity';
+import { ScrapeResult } from './scrape-result.entity';
 import { CurpProvider } from './providers/curp.provider';
 import { SatRfcProvider } from './providers/sat-rfc.provider';
 import { SCRAPER_QUEUE } from './queue/scraper.queue';
@@ -22,7 +24,7 @@ import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
       },
     }),
     BullModule.registerQueue({ name: SCRAPER_QUEUE }),
-    TypeOrmModule.forFeature([ScrapeJob]),
+    TypeOrmModule.forFeature([ScrapeJob, ScrapeResult]),
     GraphModule,
     ProviderModule,
   ],
@@ -30,6 +32,7 @@ import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
   providers: [
     ScraperService,
     ScrapeJobService,
+    ScrapeResultService,
     ScraperProcessor,
     CurpProvider,
     SatRfcProvider,
@@ -39,6 +42,6 @@ import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
       inject: [CurpProvider, SatRfcProvider],
     },
   ],
-  exports: [ScrapeJobService],
+  exports: [ScrapeJobService, ScrapeResultService],
 })
 export class ScraperModule {}

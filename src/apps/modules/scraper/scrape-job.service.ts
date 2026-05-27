@@ -11,25 +11,27 @@ export class ScrapeJobService {
     private readonly repo: Repository<ScrapeJob>,
   ) {}
 
-  create(data: { personId: string; source: string; seed: TramaProviderSeed }): Promise<ScrapeJob> {
+  create(data: {
+    entityId: string;
+    investigationId: string;
+    source: string;
+    seed: TramaProviderSeed;
+  }): Promise<ScrapeJob> {
     const job = this.repo.create({ ...data, status: ScrapeJobStatus.PENDING });
     return this.repo.save(job);
   }
 
-  async markRunning(id: string, bullJobId: string, neo4jScrapeResultId: string): Promise<void> {
+  async markRunning(id: string, bullJobId: string): Promise<void> {
     await this.repo.update(id, {
       status: ScrapeJobStatus.RUNNING,
       bullJobId,
-      neo4jScrapeResultId,
       startedAt: new Date(),
     });
   }
 
-  async markCompleted(id: string, createdNodeIds: string[], rawResult: unknown): Promise<void> {
+  async markCompleted(id: string): Promise<void> {
     await this.repo.update(id, {
       status: ScrapeJobStatus.COMPLETED,
-      createdNodeIds,
-      rawResult: rawResult as object,
       finishedAt: new Date(),
     });
   }
@@ -48,9 +50,16 @@ export class ScrapeJobService {
     return job;
   }
 
-  findByPerson(personId: string): Promise<ScrapeJob[]> {
+  findByEntity(entityId: string): Promise<ScrapeJob[]> {
     return this.repo.find({
-      where: { personId },
+      where: { entityId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  findByInvestigation(investigationId: string): Promise<ScrapeJob[]> {
+    return this.repo.find({
+      where: { investigationId },
       order: { createdAt: 'DESC' },
     });
   }

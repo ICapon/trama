@@ -24,14 +24,14 @@ export class ScraperService implements OnModuleInit {
     await this.providerService.syncFromCode(this.providers);
   }
 
-  async runForPerson(personId: string, dto: RunScrapeDto) {
-    const person = await this.graph.findEntityById(personId);
-    if (!person) throw new NotFoundException(`Person ${personId} not found`);
+  async runForEntity(entityId: string, entityType: string, dto: RunScrapeDto) {
+    const entity = await this.graph.findEntityById(entityId);
+    if (!entity) throw new NotFoundException(`Entity ${entityId} not found`);
 
     const seed = {
-      firstName: person.properties?.['firstName'] as string | undefined,
-      lastName: person.properties?.['lastName'] as string | undefined,
-      fullName: person.properties?.['fullName'] as string | undefined,
+      firstName: entity.properties?.['firstName'] as string | undefined,
+      lastName: entity.properties?.['lastName'] as string | undefined,
+      fullName: entity.properties?.['fullName'] as string | undefined,
       ...dto.seed,
     };
 
@@ -47,14 +47,21 @@ export class ScraperService implements OnModuleInit {
 
     const jobs: { id: string; source: string; bullJobId: string | undefined }[] = [];
     for (const provider of capable) {
-      const record = await this.scrapeJobService.create({ personId, source: provider.source, seed });
-      const bullJob = await this.queue.add(SCRAPE_PERSON_JOB, {
-        scrapeJobId: record.id,
-        personId,
+      const record = await this.scrapeJobService.create({
+        entityId,
+        investigationId: dto.investigationId,
         source: provider.source,
         seed,
       });
-      await this.scrapeJobService.markRunning(record.id, bullJob.id!, '');
+      const bullJob = await this.queue.add(SCRAPE_PERSON_JOB, {
+        scrapeJobId: record.id,
+        entityId,
+        entityType,
+        investigationId: dto.investigationId,
+        source: provider.source,
+        seed,
+      });
+      await this.scrapeJobService.markRunning(record.id, bullJob.id!);
       jobs.push({ id: record.id, source: provider.source, bullJobId: bullJob.id });
     }
 
@@ -65,8 +72,8 @@ export class ScraperService implements OnModuleInit {
     return this.scrapeJobService.findOne(id);
   }
 
-  getJobsByPerson(personId: string) {
-    return this.scrapeJobService.findByPerson(personId);
+  getJobsByEntity(entityId: string) {
+    return this.scrapeJobService.findByEntity(entityId);
   }
 
   listJobs() {

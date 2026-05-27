@@ -19,8 +19,11 @@ export class ScrapeJob {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid' })
-  personId: string;
+  @Column({ type: 'varchar', nullable: true })
+  entityId: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  investigationId: string | null;
 
   @Column()
   source: string;
@@ -31,20 +34,11 @@ export class ScrapeJob {
   @Column({ type: 'jsonb' })
   seed: TramaProviderSeed;
 
-  @Column({ type: 'jsonb', nullable: true })
-  rawResult: unknown | null;
-
-  @Column('text', { array: true, default: '{}' })
-  createdNodeIds: string[];
-
   @Column({ nullable: true, type: 'text' })
   errorMessage: string | null;
 
   @Column({ nullable: true, type: 'varchar' })
   bullJobId: string | null;
-
-  @Column({ nullable: true, type: 'varchar' })
-  neo4jScrapeResultId: string | null;
 
   @Column({ nullable: true, type: 'timestamptz' })
   startedAt: Date | null;

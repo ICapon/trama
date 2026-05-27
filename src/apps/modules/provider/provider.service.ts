@@ -114,10 +114,10 @@ export class ProviderService {
       take: limit,
       select: {
         id: true,
-        personId: true,
+        entityId: true,
+        investigationId: true,
         source: true,
         status: true,
-        createdNodeIds: true,
         errorMessage: true,
         bullJobId: true,
         startedAt: true,

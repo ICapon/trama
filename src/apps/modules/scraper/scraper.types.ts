@@ -2,7 +2,9 @@ import type { TramaProviderSeed } from '../../../libs/providers';
 
 export interface ScrapeJobPayload {
   scrapeJobId: string;
-  personId: string;
+  entityId: string;
+  entityType: string;
+  investigationId: string;
   source: string;
   seed: TramaProviderSeed;
 }

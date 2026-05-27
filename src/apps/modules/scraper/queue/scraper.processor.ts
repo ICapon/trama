@@ -4,6 +4,8 @@ import { Job } from 'bullmq';
 import { randomUUID } from 'crypto';
 import { GraphService } from '../../graph/graph.service';
 import { ScrapeJobService } from '../scrape-job.service';
+import { ScrapeResultService } from '../scrape-result.service';
+import { ScrapeResultStatus } from '../scrape-result.entity';
 import { ProviderService } from '../../provider/provider.service';
 import { SCRAPER_QUEUE, SCRAPE_PERSON_JOB } from './scraper.queue';
 import { TramaProvider } from '../../../../libs/providers';
@@ -19,6 +21,7 @@ export class ScraperProcessor extends WorkerHost {
     private readonly providers: TramaProvider[],
     private readonly graph: GraphService,
     private readonly scrapeJobService: ScrapeJobService,
+    private readonly scrapeResultService: ScrapeResultService,
     private readonly providerService: ProviderService,
   ) {
     super();
@@ -27,7 +30,7 @@ export class ScraperProcessor extends WorkerHost {
   async process(job: Job<ScrapeJobPayload>): Promise<void> {
     if (job.name !== SCRAPE_PERSON_JOB) return;
 
-    const { scrapeJobId, personId, source, seed } = job.data;
+    const { scrapeJobId, entityId, entityType, investigationId, source, seed } = job.data;
     const provider = this.providers.find((p) => p.source === source);
 
     if (!provider) {
@@ -36,34 +39,33 @@ export class ScraperProcessor extends WorkerHost {
       return;
     }
 
-    this.logger.log(`[${source}] Starting scrape for person ${personId}`);
+    this.logger.log(`[${source}] Starting scrape for entity ${entityId}`);
 
+    const executedAt = new Date();
     const startedAt = Date.now();
-    const scrapeResultId = randomUUID();
-    const now = new Date().toISOString();
+    const scrapeResultNodeId = randomUUID();
+    const now = executedAt.toISOString();
 
     await this.graph.createEntity({
-      id: scrapeResultId,
+      id: scrapeResultNodeId,
       type: 'ScrapeResult',
       properties: { name: `${source} scrape`, source, scrapeStatus: 'running', createdAt: now },
     });
 
     await this.graph.createRelationship({
-      fromId: personId,
-      toId: scrapeResultId,
+      fromId: entityId,
+      toId: scrapeResultNodeId,
       type: 'HAS_EVIDENCE',
     });
 
-    await this.scrapeJobService.markRunning(scrapeJobId, job.id!, scrapeResultId);
-
     try {
-      const result = await provider.execute({ entityId: personId, entityType: 'Person', seed });
+      const result = await provider.execute({ entityId, entityType, seed });
 
       for (const node of result.nodes) {
         await this.graph.createEntity(node);
         await this.graph.createRelationship({
           fromId: node.id,
-          toId: scrapeResultId,
+          toId: scrapeResultNodeId,
           type: 'FOUND_IN_SOURCE',
         });
       }
@@ -72,8 +74,10 @@ export class ScraperProcessor extends WorkerHost {
         await this.graph.createRelationship(rel);
       }
 
+      const neo4jNodeIds = result.nodes.map((n) => n.id);
+
       await this.graph.createEntity({
-        id: scrapeResultId,
+        id: scrapeResultNodeId,
         type: 'ScrapeResult',
         properties: {
           name: `${source} scrape`,
@@ -84,8 +88,25 @@ export class ScraperProcessor extends WorkerHost {
         },
       });
 
-      const createdNodeIds = result.nodes.map((n) => n.id);
-      await this.scrapeJobService.markCompleted(scrapeJobId, createdNodeIds, result.rawData);
+      await this.scrapeResultService.create({
+        scrapeJobId,
+        investigationId,
+        entityId,
+        source,
+        sourceUrl: result.sourceUrl ?? null,
+        status: ScrapeResultStatus.SUCCESS,
+        confidence: result.confidence ?? null,
+        rawData: result.rawData ?? null,
+        summary: null,
+        nodesCreated: result.nodes.length,
+        relationshipsCreated: result.relationships.length,
+        neo4jNodeIds,
+        neo4jScrapeResultId: scrapeResultNodeId,
+        executedAt,
+        durationMs: Date.now() - startedAt,
+      });
+
+      await this.scrapeJobService.markCompleted(scrapeJobId);
       await this.providerService.recordRun(source, true, Date.now() - startedAt);
 
       this.logger.log(
@@ -95,7 +116,7 @@ export class ScraperProcessor extends WorkerHost {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
       await this.graph.createEntity({
-        id: scrapeResultId,
+        id: scrapeResultNodeId,
         type: 'ScrapeResult',
         properties: {
           name: `${source} scrape`,
@@ -106,9 +127,27 @@ export class ScraperProcessor extends WorkerHost {
         },
       });
 
+      await this.scrapeResultService.create({
+        scrapeJobId,
+        investigationId,
+        entityId,
+        source,
+        sourceUrl: null,
+        status: ScrapeResultStatus.ERROR,
+        confidence: null,
+        rawData: null,
+        summary: null,
+        nodesCreated: 0,
+        relationshipsCreated: 0,
+        neo4jNodeIds: [],
+        neo4jScrapeResultId: scrapeResultNodeId,
+        executedAt,
+        durationMs: Date.now() - startedAt,
+      });
+
       await this.scrapeJobService.markFailed(scrapeJobId, errorMessage);
       await this.providerService.recordRun(source, false, Date.now() - startedAt, errorMessage);
-      this.logger.error(`[${source}] Scrape failed for person ${personId}`, error);
+      this.logger.error(`[${source}] Scrape failed for entity ${entityId}`, error);
       throw error;
     }
   }
