@@ -25,6 +25,11 @@ export class ScraperController {
     return this.scraper.getJobsByPerson(personId);
   }
 
+  @Get('jobs')
+  listJobs() {
+    return this.scraper.listJobs();
+  }
+
   @Get('jobs/:id')
   getJobStatus(@Param('id') id: string) {
     return this.scraper.getJobStatus(id);

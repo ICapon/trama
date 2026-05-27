@@ -1,8 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Provider } from './provider.entity';
+import { ScrapeJob } from '../scraper/scrape-job.entity';
 import type { TramaProvider } from '../../../libs/providers';
+import type { CreateProviderDto, UpdateProviderDto } from '../../../libs/schemas/provider.schema';
 
 @Injectable()
 export class ProviderService {
@@ -11,6 +14,8 @@ export class ProviderService {
   constructor(
     @InjectRepository(Provider)
     private readonly repo: Repository<Provider>,
+    @InjectRepository(ScrapeJob)
+    private readonly scrapeJobRepo: Repository<ScrapeJob>,
   ) {}
 
   // Llamado al arrancar — hace upsert de cada provider registrado en código.
@@ -65,6 +70,11 @@ export class ProviderService {
     });
   }
 
+  async findActiveSources(): Promise<Set<string>> {
+    const active = await this.repo.find({ where: { isActive: true }, select: { source: true } });
+    return new Set(active.map((p) => p.source));
+  }
+
   findAll(): Promise<Provider[]> {
     return this.repo.find({ order: { category: 'ASC', name: 'ASC' } });
   }
@@ -75,5 +85,45 @@ export class ProviderService {
 
   async setActive(source: string, isActive: boolean): Promise<void> {
     await this.repo.update({ source }, { isActive });
+  }
+
+  async create(dto: CreateProviderDto): Promise<Provider> {
+    const exists = await this.repo.findOneBy({ source: dto.source });
+    if (exists) throw new ConflictException(`Provider "${dto.source}" already exists`);
+    const provider = this.repo.create(dto);
+    return this.repo.save(provider);
+  }
+
+  async update(source: string, dto: UpdateProviderDto): Promise<Provider> {
+    const provider = await this.repo.findOneBy({ source });
+    if (!provider) throw new NotFoundException(`Provider "${source}" not found`);
+    Object.assign(provider, dto);
+    return this.repo.save(provider);
+  }
+
+  async remove(source: string): Promise<void> {
+    const provider = await this.repo.findOneBy({ source });
+    if (!provider) throw new NotFoundException(`Provider "${source}" not found`);
+    await this.repo.remove(provider);
+  }
+
+  findRunsBySource(source: string, limit = 50): Promise<ScrapeJob[]> {
+    return this.scrapeJobRepo.find({
+      where: { source },
+      order: { createdAt: 'DESC' },
+      take: limit,
+      select: {
+        id: true,
+        personId: true,
+        source: true,
+        status: true,
+        createdNodeIds: true,
+        errorMessage: true,
+        bullJobId: true,
+        startedAt: true,
+        finishedAt: true,
+        createdAt: true,
+      },
+    });
   }
 }

@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
 import { GraphService } from './graph.service';
 import { ZodValidationPipe } from '../../../libs/pipes/zod-validation.pipe';
-import { CreateNodeSchema, type CreateNodeDto } from '../../../libs/schemas/graph-node.schema';
+import { CreateNodeSchema, UpdateNodeSchema, type CreateNodeDto, type UpdateNodeDto } from '../../../libs/schemas/graph-node.schema';
 import { CreateRelationshipSchema, type CreateRelationshipDto } from '../../../libs/schemas/graph-relationship.schema';
 
 @Controller('graph')
@@ -25,6 +25,14 @@ export class GraphController {
     return this.graphService.findNeighbors(id, d);
   }
 
+  @Patch('node/:id')
+  updateNode(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateNodeSchema)) dto: UpdateNodeDto,
+  ) {
+    return this.graphService.updateEntity(id, dto.properties);
+  }
+
   @Post('node')
   createNode(@Body(new ZodValidationPipe(CreateNodeSchema)) dto: CreateNodeDto) {
     return this.graphService.createEntity({
@@ -42,6 +50,24 @@ export class GraphController {
       type: dto.type as any,
       properties: dto.properties,
     });
+  }
+
+  @Get('node/:id/relationships')
+  getRelationships(
+    @Param('id') id: string,
+    @Query('type') type?: string,
+  ) {
+    return this.graphService.findRelationships(id, type);
+  }
+
+  @Delete('relationship/:fromId/:type/:toId')
+  @HttpCode(204)
+  deleteRelationship(
+    @Param('fromId') fromId: string,
+    @Param('type') type: string,
+    @Param('toId') toId: string,
+  ) {
+    return this.graphService.deleteRelationship(fromId, toId, type);
   }
 
   @Delete('node/:id')

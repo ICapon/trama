@@ -7,6 +7,7 @@ import { Investigation } from '../investigation/investigation.entity';
 import { TRAMA_NODE_TYPE_SET } from './const/node-categories.const';
 import { TRAMA_RELATIONSHIP_TYPE_SET } from './const/relationship-types.const';
 import { createEntityNodeQuery } from './queries/create-node.query';
+import { UPDATE_NODE_QUERY } from './queries/update-node.query';
 import { createRelationshipQuery } from './queries/create-relationship.query';
 import { DELETE_NODE_QUERY } from './queries/delete-node.query';
 import {
@@ -15,7 +16,9 @@ import {
   FIND_ENTITY_BY_ID_QUERY,
   FIND_GRAPH_BY_NODE_IDS_QUERY,
   FIND_NEIGHBORS_QUERY,
+  FIND_NODE_RELATIONSHIPS_QUERY,
   FIND_SHORTEST_PATH_QUERY,
+  DELETE_RELATIONSHIP_QUERY,
   SEARCH_ENTITIES_BY_TEXT_QUERY,
   findNeighborsByDepthQuery,
 } from './queries/find-node.query';
@@ -79,7 +82,27 @@ export class GraphService {
 
     const record = result.records[0];
     if (!record) return null;
-    return { from: record.get('from'), r: record.get('r'), to: record.get('to') };
+
+    const fromNode = toGraphNodeResponse(record.get('from'));
+    const toNode   = toGraphNodeResponse(record.get('to'));
+    const edge     = toGraphEdgeResponse(record.get('r'), fromNode.id, toNode.id);
+
+    return { nodes: [fromNode, toNode], edge };
+  }
+
+  async updateEntity(id: string, properties: Record<string, unknown>) {
+    // Prevent overwriting immutable fields
+    const { id: _id, type: _type, createdAt: _ca, ...safe } = properties;
+
+    const result = await this.neo4j.write(UPDATE_NODE_QUERY, {
+      id,
+      properties: safe,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const raw = result.records[0]?.get('n');
+    if (!raw) throw new NotFoundException(`Node ${id} not found`);
+    return toGraphNodeResponse(raw);
   }
 
   async findEntityById(id: string) {
@@ -164,6 +187,40 @@ export class GraphService {
     );
 
     return { nodes: [...nodeMap.values()], edges: validEdges };
+  }
+
+  async findRelationships(id: string, relType?: string): Promise<GraphEdgeResponse[]> {
+    const result = await this.neo4j.read(FIND_NODE_RELATIONSHIPS_QUERY, {
+      id,
+      relType: relType ?? null,
+    });
+
+    return result.records.map((record) => {
+      const n = record.get('n') as import('neo4j-driver').Node;
+      const r = record.get('r') as import('neo4j-driver').Relationship;
+      const neighbor = record.get('neighbor') as import('neo4j-driver').Node;
+
+      const nProps = n.properties as Record<string, unknown>;
+      const neighborProps = neighbor.properties as Record<string, unknown>;
+
+      const fromId = r.startNodeElementId === n.elementId
+        ? (nProps.id as string)
+        : (neighborProps.id as string);
+      const toId = r.startNodeElementId === n.elementId
+        ? (neighborProps.id as string)
+        : (nProps.id as string);
+
+      return toGraphEdgeResponse(r, fromId, toId);
+    });
+  }
+
+  async deleteRelationship(fromId: string, toId: string, type: string): Promise<void> {
+    this.validateRelationshipType(type);
+    const result = await this.neo4j.write(DELETE_RELATIONSHIP_QUERY, { fromId, toId, type });
+    const deleted = result.records[0]?.get('deleted')?.toNumber() ?? 0;
+    if (deleted === 0) {
+      throw new NotFoundException(`Relationship ${type} between ${fromId} and ${toId} not found`);
+    }
   }
 
   async removeNode(id: string) {

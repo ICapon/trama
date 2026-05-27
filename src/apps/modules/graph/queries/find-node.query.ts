@@ -49,6 +49,20 @@ export const FIND_SHORTEST_PATH_QUERY = `
   RETURN p
 `;
 
+// All relationships of a node. Pass $relType = null to skip type filter.
+export const FIND_NODE_RELATIONSHIPS_QUERY = `
+  MATCH (n:Entity { id: $id })-[r]-(neighbor:Entity)
+  WHERE $relType IS NULL OR type(r) = $relType
+  RETURN n, r, neighbor
+`;
+
+export const DELETE_RELATIONSHIP_QUERY = `
+  MATCH (from:Entity { id: $fromId })-[r]-(to:Entity { id: $toId })
+  WHERE type(r) = $type
+  DELETE r
+  RETURN count(r) AS deleted
+`;
+
 // Returns each root node with its direct neighbors and the connecting relationship.
 // Use findGraphByNodeIds() in GraphService to deduplicate and map the results.
 export const FIND_GRAPH_BY_NODE_IDS_QUERY = `

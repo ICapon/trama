@@ -35,9 +35,10 @@ export class ScraperService implements OnModuleInit {
       ...dto.seed,
     };
 
+    const activeInDb = await this.providerService.findActiveSources();
     const capable = this.providers.filter((p) => {
       const matchesFilter = !dto.sources?.length || dto.sources.includes(p.source);
-      return matchesFilter && p.canHandle(seed);
+      return matchesFilter && activeInDb.has(p.source) && p.canHandle(seed);
     });
 
     if (!capable.length) {
@@ -68,7 +69,11 @@ export class ScraperService implements OnModuleInit {
     return this.scrapeJobService.findByPerson(personId);
   }
 
+  listJobs() {
+    return this.scrapeJobService.findAll();
+  }
+
   listProviders() {
-    return this.providers.map((p) => ({ source: p.source, description: p.description }));
+    return this.providerService.findAll();
   }
 }
