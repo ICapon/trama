@@ -12,6 +12,9 @@ import { ScrapeJob } from './scrape-job.entity';
 import { ScrapeResult } from './scrape-result.entity';
 import { CurpProvider } from './providers/curp.provider';
 import { SatRfcProvider } from './providers/sat-rfc.provider';
+import { XSocialProvider } from './providers/x-social.provider';
+import { DorkProvider } from './providers/dork.provider';
+import { BrowserService } from './browser/browser.service';
 import { SCRAPER_QUEUE } from './queue/scraper.queue';
 import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
 
@@ -34,12 +37,15 @@ import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
     ScrapeJobService,
     ScrapeResultService,
     ScraperProcessor,
+    BrowserService,
     CurpProvider,
     SatRfcProvider,
+    XSocialProvider,
+    DorkProvider,
     {
       provide: TRAMA_PROVIDERS_TOKEN,
-      useFactory: (curp: CurpProvider, sat: SatRfcProvider) => [curp, sat],
-      inject: [CurpProvider, SatRfcProvider],
+      useFactory: (curp: CurpProvider, sat: SatRfcProvider, x: XSocialProvider, dork: DorkProvider) => [curp, sat, x, dork],
+      inject: [CurpProvider, SatRfcProvider, XSocialProvider, DorkProvider],
     },
   ],
   exports: [ScrapeJobService, ScrapeResultService],
