@@ -47,11 +47,13 @@ export class ScraperService implements OnModuleInit {
 
     const jobs: { id: string; source: string; bullJobId: string | undefined }[] = [];
     for (const provider of capable) {
+      const providerConfig = dto.config?.[provider.source] as Record<string, unknown> | undefined;
       const record = await this.scrapeJobService.create({
         entityId,
         investigationId: dto.investigationId,
         source: provider.source,
         seed,
+        config: providerConfig,
       });
       const bullJob = await this.queue.add(SCRAPE_PERSON_JOB, {
         scrapeJobId: record.id,
@@ -60,6 +62,7 @@ export class ScraperService implements OnModuleInit {
         investigationId: dto.investigationId,
         source: provider.source,
         seed,
+        config: providerConfig,
       });
       await this.scrapeJobService.markRunning(record.id, bullJob.id!);
       jobs.push({ id: record.id, source: provider.source, bullJobId: bullJob.id });

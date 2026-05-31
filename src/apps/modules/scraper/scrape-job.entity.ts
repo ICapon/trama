@@ -34,6 +34,9 @@ export class ScrapeJob {
   @Column({ type: 'jsonb' })
   seed: TramaProviderSeed;
 
+  @Column({ type: 'jsonb', nullable: true })
+  config: Record<string, unknown> | null;
+
   @Column({ nullable: true, type: 'text' })
   errorMessage: string | null;
 

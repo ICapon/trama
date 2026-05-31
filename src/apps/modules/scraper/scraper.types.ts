@@ -7,4 +7,5 @@ export interface ScrapeJobPayload {
   investigationId: string;
   source: string;
   seed: TramaProviderSeed;
+  config?: Record<string, unknown>;
 }

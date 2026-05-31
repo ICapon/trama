@@ -15,6 +15,11 @@ import { SatRfcProvider } from './providers/sat-rfc.provider';
 import { XSocialProvider } from './providers/x-social.provider';
 import { DorkProvider } from './providers/dork.provider';
 import { BrowserService } from './browser/browser.service';
+import { BraveEngine } from './browser/engines/brave.engine';
+import { SearxngEngine } from './browser/engines/searxng.engine';
+import { DdgBrowserEngine } from './browser/engines/ddg-browser.engine';
+import { BraveBrowserEngine } from './browser/engines/brave-browser.engine';
+import { SearchService, SEARCH_ENGINES_TOKEN } from './browser/search.service';
 import { SCRAPER_QUEUE } from './queue/scraper.queue';
 import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
 
@@ -38,6 +43,16 @@ import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
     ScrapeResultService,
     ScraperProcessor,
     BrowserService,
+    BraveEngine,
+    BraveBrowserEngine,
+    SearxngEngine,
+    DdgBrowserEngine,
+    {
+      provide: SEARCH_ENGINES_TOKEN,
+      useFactory: (brave: BraveEngine, braveBrowser: BraveBrowserEngine, searxng: SearxngEngine, ddg: DdgBrowserEngine) => [brave, braveBrowser, searxng, ddg],
+      inject: [BraveEngine, BraveBrowserEngine, SearxngEngine, DdgBrowserEngine],
+    },
+    SearchService,
     CurpProvider,
     SatRfcProvider,
     XSocialProvider,

@@ -16,6 +16,7 @@ export class ScrapeJobService {
     investigationId: string;
     source: string;
     seed: TramaProviderSeed;
+    config?: Record<string, unknown>;
   }): Promise<ScrapeJob> {
     const job = this.repo.create({ ...data, status: ScrapeJobStatus.PENDING });
     return this.repo.save(job);

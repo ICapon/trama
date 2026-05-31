@@ -8,15 +8,10 @@ import type {
   TramaNodeType,
 } from '../../../../libs/providers';
 import type { TramaRelationshipType } from '../../../modules/graph/graph.types';
-import { BrowserService } from '../browser/browser.service';
+import { SearchService } from '../browser/search.service';
+import { DorkSearchConfigSchema, type DorkSearchConfig } from '../../../../libs/schemas/scraper.schema';
 
 // ─── Tipos internos ───────────────────────────────────────────────────────────
-
-interface SearchResult {
-  url: string;
-  title: string;
-  snippet: string;
-}
 
 interface DorkQuery {
   query: string;
@@ -42,32 +37,7 @@ const SOCIAL_PLATFORMS: Record<string, string> = {
   't.me': 'telegram',
 };
 
-// ─── Brave Search API ─────────────────────────────────────────────────────────
-
-interface BraveWebResult {
-  url: string;
-  title: string;
-  description?: string;
-  profile?: { name?: string; long_name?: string; url?: string };
-}
-
-interface BraveResponse {
-  web?: { results?: BraveWebResult[] };
-}
-
-// ─── SearXNG API ─────────────────────────────────────────────────────────────
-
-interface SearxResult {
-  url: string;
-  title?: string;
-  content?: string;
-}
-
-interface SearxResponse {
-  results?: SearxResult[];
-}
-
-// ─── DDG Instant Answer API ───────────────────────────────────────────────────
+// ─── DDG Instant Answer ───────────────────────────────────────────────────────
 
 interface DdgInfoboxItem {
   label: string;
@@ -90,7 +60,7 @@ export class DorkProvider extends TramaProvider {
   readonly source = 'dork-search';
   readonly name = 'Dork Search';
   readonly description =
-    'Busca exposición pública del objetivo via Brave Search API o SearXNG; enriquece con DDG Instant Answer';
+    'Busca exposición pública del objetivo via Brave Search API, SearXNG o Playwright stealth; enriquece con DDG Instant Answer';
   readonly category = TramaProviderCategory.IDENTITY;
   readonly countries = [];
   readonly supportedInputs: string[] = ['fullName', 'firstName', 'email', 'username'];
@@ -98,10 +68,7 @@ export class DorkProvider extends TramaProvider {
 
   private readonly logger = new Logger(DorkProvider.name);
 
-  private readonly braveApiKey = process.env.BRAVE_API_KEY;
-  private readonly searxngUrl = process.env.SEARXNG_URL?.replace(/\/$/, '');
-
-  constructor(private readonly browser: BrowserService) {
+  constructor(private readonly search: SearchService) {
     super();
   }
 
@@ -115,12 +82,10 @@ export class DorkProvider extends TramaProvider {
   }
 
   // ─── Query builder ─────────────────────────────────────────────────────────
-  // Estrategia: de más específico a más amplio.
-  // Las comillas exactas solo se usan para nombres cortos (≤ 2 palabras) o email.
-  // Para nombres largos (≥ 3 palabras) se usa la forma corta primero + nombre completo sin comillas.
 
-  private buildQueries(seed: TramaProviderSeed, max: number): DorkQuery[] {
+  private buildQueries(seed: TramaProviderSeed, cfg: DorkSearchConfig): DorkQuery[] {
     const queries: DorkQuery[] = [];
+    const max = cfg.maxQueries ?? 3;
 
     const fullName =
       seed.fullName ??
@@ -128,27 +93,54 @@ export class DorkProvider extends TramaProvider {
 
     if (fullName) {
       const parts = fullName.trim().split(/\s+/);
-      // Nombre corto: primer nombre + último apellido (ej: "Irving Crespo")
       const shortName = parts.length >= 3
         ? `${parts[0]} ${parts[parts.length - 1]}`
         : fullName;
-
-      // Nombre medio: primer nombre + segundo apellido sin primer apellido (ej: "Irving Capon Crespo")
       const mediumName = parts.length >= 4
         ? `${parts[0]} ${parts.slice(2).join(' ')}`
         : fullName;
 
-      queries.push(
-        // Sin comillas primero — más amplio, más resultados para personas sin presencia masiva
-        { query: fullName, label: 'name-general' },
-        // Comillas solo en nombre corto — más preciso sin ser tan restrictivo
-        { query: `"${shortName}" site:linkedin.com`, label: 'name-linkedin' },
-        { query: `"${shortName}" site:github.com`, label: 'name-github' },
-        // Nombre medio entre comillas para PDFs/documentos formales
-        { query: `"${mediumName}" filetype:pdf`, label: 'name-pdf' },
-        // Nombre completo entre comillas como último recurso
-        { query: `"${fullName}"`, label: 'name-exact' },
-      );
+      const baseTerms = cfg.keywords?.length
+        ? `${fullName} ${cfg.keywords.join(' ')}`
+        : fullName;
+
+      if (cfg.searchMode === 'documents') {
+        const types = cfg.fileTypes?.length ? cfg.fileTypes : ['pdf'];
+        for (const ft of types) {
+          queries.push({ query: `"${shortName}" filetype:${ft}`, label: `name-${ft}` });
+        }
+        if (cfg.fileTypes?.length) {
+          // mediumName variant for formal documents
+          queries.push({ query: `"${mediumName}" filetype:${types[0]}`, label: 'name-doc-medium' });
+        }
+      } else if (cfg.searchMode === 'identity') {
+        const platforms = cfg.platforms?.length ? cfg.platforms : ['linkedin.com', 'github.com'];
+        for (const p of platforms) {
+          const site = p.includes('.') ? p : `${p}.com`;
+          queries.push({ query: `"${shortName}" site:${site}`, label: `name-${p}` });
+        }
+        queries.push({ query: fullName, label: 'name-general' });
+      } else {
+        // general: broadest first
+        queries.push({ query: baseTerms, label: 'name-general' });
+
+        const platforms = cfg.platforms?.length
+          ? cfg.platforms.map((p) => (p.includes('.') ? p : `${p}.com`))
+          : ['linkedin.com', 'github.com'];
+        for (const site of platforms) {
+          queries.push({ query: `"${shortName}" site:${site}`, label: `name-${site.split('.')[0]}` });
+        }
+
+        if (cfg.fileTypes?.length) {
+          for (const ft of cfg.fileTypes) {
+            queries.push({ query: `"${mediumName}" filetype:${ft}`, label: `name-${ft}` });
+          }
+        } else {
+          queries.push({ query: `"${mediumName}" filetype:pdf`, label: 'name-pdf' });
+        }
+
+        queries.push({ query: `"${fullName}"`, label: 'name-exact' });
+      }
     }
 
     if (seed.email) {
@@ -175,7 +167,9 @@ export class DorkProvider extends TramaProvider {
       // URL inválida
     }
 
-    if (url.toLowerCase().endsWith('.pdf') || label.includes('pdf')) return 'Document';
+    if (url.toLowerCase().endsWith('.pdf') || label.includes('pdf') || label.includes('doc')) {
+      return 'Document';
+    }
 
     return 'URL';
   }
@@ -194,78 +188,6 @@ export class DorkProvider extends TramaProvider {
     return 0.5;
   }
 
-  // ─── Backend: Brave Search API ────────────────────────────────────────────
-
-  private async queryBrave(dork: DorkQuery, count = 10): Promise<SearchResult[]> {
-    if (!this.braveApiKey) return [];
-
-    const params = new URLSearchParams({ q: dork.query, count: String(count) });
-    const res = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
-      headers: {
-        'Accept': 'application/json',
-        'Accept-Encoding': 'gzip',
-        'X-Subscription-Token': this.braveApiKey,
-      },
-    });
-
-    if (!res.ok) {
-      this.logger.warn(`[${dork.label}] Brave respondió ${res.status}`);
-      return [];
-    }
-
-    const data: BraveResponse = await res.json();
-    const results: SearchResult[] = [];
-
-    for (const r of data.web?.results ?? []) {
-      if (!r.url?.startsWith('http')) continue;
-      results.push({
-        url: r.url,
-        title: r.title ?? r.url,
-        snippet: r.description ?? '',
-      });
-    }
-
-    this.logger.log(`[${dork.label}] Brave: ${results.length} resultados`);
-    return results;
-  }
-
-  // ─── Backend: SearXNG ────────────────────────────────────────────────────
-
-  private async querySearxng(dork: DorkQuery, count = 10): Promise<SearchResult[]> {
-    if (!this.searxngUrl) return [];
-
-    const params = new URLSearchParams({
-      q: dork.query,
-      format: 'json',
-      categories: 'general',
-      pageno: '1',
-    });
-
-    const res = await fetch(`${this.searxngUrl}/search?${params}`, {
-      headers: { 'Accept': 'application/json' },
-    });
-
-    if (!res.ok) {
-      this.logger.warn(`[${dork.label}] SearXNG respondió ${res.status}`);
-      return [];
-    }
-
-    const data: SearxResponse = await res.json();
-    const results: SearchResult[] = [];
-
-    for (const r of (data.results ?? []).slice(0, count)) {
-      if (!r.url?.startsWith('http')) continue;
-      results.push({
-        url: r.url,
-        title: r.title ?? r.url,
-        snippet: r.content ?? '',
-      });
-    }
-
-    this.logger.log(`[${dork.label}] SearXNG: ${results.length} resultados`);
-    return results;
-  }
-
   // ─── Enriquecimiento: DDG Instant Answer ─────────────────────────────────
 
   private async enrichWithDdg(query: string): Promise<DdgResponse | null> {
@@ -279,31 +201,21 @@ export class DorkProvider extends TramaProvider {
     }
   }
 
-  // ─── Helpers ─────────────────────────────────────────────────────────────
-
   private sleep(ms: number) {
     return new Promise<void>((r) => setTimeout(r, ms));
-  }
-
-  private hasSearchBackend(): boolean {
-    return !!(this.braveApiKey || this.searxngUrl || this.browser);
   }
 
   // ─── Execute ─────────────────────────────────────────────────────────────
 
   async execute(ctx: TramaProviderContext): Promise<TramaProviderResult> {
-    const { entityId, config } = ctx;
-    const maxQueries = (config?.maxQueries as number | undefined) ?? 3;
-    const delayMs = (config?.delayMs as number | undefined) ?? 1200;
+    const { entityId, config: rawConfig } = ctx;
 
-    if (!this.hasSearchBackend()) {
-      this.logger.warn(
-        'No hay backend de búsqueda configurado. ' +
-        'Define BRAVE_API_KEY o SEARXNG_URL en .env para habilitar dork search.',
-      );
-    }
+    const cfgParsed = DorkSearchConfigSchema.safeParse(rawConfig ?? {});
+    const cfg: DorkSearchConfig = cfgParsed.success ? cfgParsed.data : {};
+    const delayMs = cfg.delayMs ?? 1200;
+    const engine = cfg.engine ?? 'auto';
 
-    const queries = this.buildQueries(ctx.seed, maxQueries);
+    const queries = this.buildQueries(ctx.seed, cfg);
     if (queries.length === 0) {
       throw new Error('No hay campos suficientes en el seed para generar dorks');
     }
@@ -312,7 +224,7 @@ export class DorkProvider extends TramaProvider {
     const nodes: TramaProviderResult['nodes'] = [];
     const relationships: TramaProviderResult['relationships'] = [];
     const urlSeen = new Set<string>();
-    const domainMap = new Map<string, string>(); // hostname → websiteNodeId
+    const domainMap = new Map<string, string>();
 
     // ── Búsquedas ────────────────────────────────────────────────────────────
 
@@ -321,20 +233,10 @@ export class DorkProvider extends TramaProvider {
       const query = queries[i];
       this.logger.log(`[${query.label}] ${query.query}`);
 
-      let results: SearchResult[] = [];
+      let results: { url: string; title: string; snippet: string }[] = [];
 
       try {
-        if (this.braveApiKey) {
-          results = await this.queryBrave(query);
-        }
-        if (results.length === 0 && this.searxngUrl) {
-          results = await this.querySearxng(query);
-        }
-        if (results.length === 0) {
-          this.logger.log(`[${query.label}] Usando browser headless como fallback`);
-          const raw = await this.browser.search(query.query);
-          results = raw;
-        }
+        results = await this.search.search(query.query, 10, engine);
       } catch (err) {
         this.logger.warn(`Query falló (${query.label}): ${String(err)}`);
         continue;
@@ -381,7 +283,6 @@ export class DorkProvider extends TramaProvider {
           type: this.nodeRelType(nodeType),
         });
 
-        // Website deduplicado por dominio
         if (!domainMap.has(hostname)) {
           const websiteId = randomUUID();
           domainMap.set(hostname, websiteId);
@@ -436,7 +337,6 @@ export class DorkProvider extends TramaProvider {
         });
         relationships.push({ fromId: entityId, toId: sourceId, type: 'FOUND_IN_SOURCE' });
 
-        // Thumbnail si existe
         if (ddg.Image) {
           const imgId = randomUUID();
           nodes.push({
@@ -457,7 +357,7 @@ export class DorkProvider extends TramaProvider {
     }
 
     this.logger.log(
-      `Dork completo: ${urlSeen.size} URLs, ${domainMap.size} dominios, DDG enrichment: ${name ? 'sí' : 'no'}`,
+      `Dork completo: ${urlSeen.size} URLs, ${domainMap.size} dominios, engine: ${engine}, DDG: ${name ? 'sí' : 'no'}`,
     );
     return { nodes, relationships };
   }

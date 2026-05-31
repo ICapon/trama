@@ -19,10 +19,11 @@ export class BrowserService implements OnModuleDestroy {
   private browser: Browser | null = null;
   private launchPromise: Promise<Browser> | null = null;
 
-  // Contexto persistente — se reutiliza entre búsquedas para aprovechar
-  // cookies de sesión y JS ya cacheado de DDG (reduce latencia de ~9s a ~1s)
   private context: BrowserContext | null = null;
   private page: Page | null = null;
+
+  private braveContext: BrowserContext | null = null;
+  private bravePage: Page | null = null;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -77,11 +78,34 @@ export class BrowserService implements OnModuleDestroy {
 
   async onModuleDestroy() {
     await this.context?.close().catch(() => undefined);
+    await this.braveContext?.close().catch(() => undefined);
     if (this.browser?.isConnected()) {
       await this.browser.close();
       this.browser = null;
       this.logger.log('Browser cerrado');
     }
+  }
+
+  private async getBravePage(): Promise<Page> {
+    if (this.bravePage && !this.bravePage.isClosed()) return this.bravePage;
+
+    const browser = await this.getBrowser();
+
+    this.braveContext = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      locale: 'en-US',
+      viewport: { width: 1280, height: 800 },
+      extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
+    });
+
+    this.bravePage = await this.braveContext.newPage();
+    await this.bravePage.route(
+      '**/*.{png,jpg,jpeg,gif,webp,svg,woff,woff2,ttf,eot}',
+      (r) => r.abort(),
+    );
+
+    return this.bravePage;
   }
 
   // ── Search ─────────────────────────────────────────────────────────────────
@@ -92,8 +116,18 @@ export class BrowserService implements OnModuleDestroy {
       return await this.searchDdg(page, query, maxResults);
     } catch (err) {
       this.logger.error(`Browser search falló para "${query}": ${String(err)}`);
-      // Si la página quedó en mal estado, la descartamos para la próxima búsqueda
       this.page = null;
+      return [];
+    }
+  }
+
+  async searchBrave(query: string, maxResults = 10): Promise<BrowserSearchResult[]> {
+    try {
+      const page = await this.getBravePage();
+      return await this.doSearchBrave(page, query, maxResults);
+    } catch (err) {
+      this.logger.error(`Brave browser search falló para "${query}": ${String(err)}`);
+      this.bravePage = null;
       return [];
     }
   }
@@ -133,6 +167,44 @@ export class BrowserService implements OnModuleDestroy {
             return {
               url: a?.href ?? '',
               title: a?.textContent?.trim() ?? '',
+              snippet: snip?.textContent?.trim() ?? '',
+            };
+          })
+          .filter((r) => r.url.startsWith('http')),
+      { max: maxResults },
+    );
+  }
+
+  // ── Brave Search ───────────────────────────────────────────────────────────
+
+  private async doSearchBrave(
+    page: Page,
+    query: string,
+    maxResults: number,
+  ): Promise<BrowserSearchResult[]> {
+    const url = `https://search.brave.com/search?q=${encodeURIComponent(query)}&source=web`;
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+
+    const hasResults = await page
+      .waitForSelector('.snippet', { timeout: 8_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (!hasResults) {
+      this.logger.log(`Brave: sin resultados para "${query}"`);
+      return [];
+    }
+
+    return page.evaluate(
+      ({ max }) =>
+        Array.from(document.querySelectorAll('.snippet'))
+          .slice(0, max)
+          .map((el) => {
+            const a = el.querySelector('a.result-header') as HTMLAnchorElement | null;
+            const snip = el.querySelector('.snippet-description');
+            return {
+              url: a?.href ?? '',
+              title: a?.querySelector('.title')?.textContent?.trim() ?? a?.textContent?.trim() ?? '',
               snippet: snip?.textContent?.trim() ?? '',
             };
           })

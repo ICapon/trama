@@ -30,7 +30,7 @@ export class ScraperProcessor extends WorkerHost {
   async process(job: Job<ScrapeJobPayload>): Promise<void> {
     if (job.name !== SCRAPE_PERSON_JOB) return;
 
-    const { scrapeJobId, entityId, entityType, investigationId, source, seed } = job.data;
+    const { scrapeJobId, entityId, entityType, investigationId, source, seed, config } = job.data;
     const provider = this.providers.find((p) => p.source === source);
 
     if (!provider) {
@@ -59,7 +59,7 @@ export class ScraperProcessor extends WorkerHost {
     });
 
     try {
-      const result = await provider.execute({ entityId, entityType, seed });
+      const result = await provider.execute({ entityId, entityType, seed, config });
 
       for (const node of result.nodes) {
         await this.graph.createEntity(node);
