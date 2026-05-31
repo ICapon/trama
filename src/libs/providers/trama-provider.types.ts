@@ -10,6 +10,7 @@ export enum TramaProviderCategory {
 }
 
 export interface TramaProviderSeed {
+  // Person
   firstName?: string;
   lastName?: string;
   fullName?: string;
@@ -17,6 +18,13 @@ export interface TramaProviderSeed {
   email?: string;
   username?: string;
   socialUrl?: string;
+  // Organization / entity
+  organization?: string;
+  // Technical
+  domain?: string;
+  phone?: string;
+  // Generic free-form query — broadest possible input for search-based providers
+  query?: string;
 }
 
 export interface TramaProviderContext {

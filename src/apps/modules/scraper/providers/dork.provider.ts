@@ -77,7 +77,11 @@ export class DorkProvider extends TramaProvider {
       seed.fullName ||
       (seed.firstName && seed.lastName) ||
       seed.email ||
-      seed.username
+      seed.username ||
+      seed.organization ||
+      seed.domain ||
+      seed.phone ||
+      seed.query
     );
   }
 
@@ -152,6 +156,72 @@ export class DorkProvider extends TramaProvider {
         { query: `${seed.username} site:github.com`, label: 'username-github' },
         { query: `"${seed.username}"`, label: 'username-general' },
       );
+    }
+
+    // ── Organization ─────────────────────────────────────────────────────────
+    if (seed.organization) {
+      const org = seed.organization.trim();
+      queries.push({ query: `"${org}"`, label: 'org-general' });
+      queries.push({ query: `"${org}" site:linkedin.com`, label: 'org-linkedin' });
+
+      if (cfg.searchMode === 'documents') {
+        const types = cfg.fileTypes?.length ? cfg.fileTypes : ['pdf'];
+        for (const ft of types) {
+          queries.push({ query: `"${org}" filetype:${ft}`, label: `org-${ft}` });
+        }
+      } else if (cfg.searchMode === 'identity') {
+        const platforms = cfg.platforms?.length ? cfg.platforms : ['linkedin.com', 'gob.mx'];
+        for (const p of platforms) {
+          const site = p.includes('.') ? p : `${p}.com`;
+          queries.push({ query: `"${org}" site:${site}`, label: `org-${p}` });
+        }
+      } else {
+        queries.push({ query: `"${org}" filetype:pdf`, label: 'org-docs' });
+        if (cfg.keywords?.length) {
+          queries.push({ query: `"${org}" ${cfg.keywords.join(' ')}`, label: 'org-keywords' });
+        }
+      }
+    }
+
+    // ── Domain ───────────────────────────────────────────────────────────────
+    if (seed.domain) {
+      const domain = seed.domain.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+      queries.push({ query: `site:${domain}`, label: 'domain-index' });
+      queries.push({ query: `"${domain}"`, label: 'domain-exposure' });
+      queries.push({ query: `site:${domain} filetype:pdf`, label: 'domain-docs' });
+      if (cfg.keywords?.length) {
+        queries.push({ query: `site:${domain} ${cfg.keywords.join(' ')}`, label: 'domain-keywords' });
+      }
+    }
+
+    // ── Phone ────────────────────────────────────────────────────────────────
+    if (seed.phone) {
+      const phone = seed.phone.trim();
+      const stripped = phone.replace(/[\s\-\(\)\.]/g, '');
+      queries.push({ query: `"${phone}"`, label: 'phone-formatted' });
+      if (stripped !== phone) {
+        queries.push({ query: `"${stripped}"`, label: 'phone-stripped' });
+      }
+    }
+
+    // ── Free-form query ──────────────────────────────────────────────────────
+    if (seed.query) {
+      const q = seed.query.trim();
+      queries.push({ query: q, label: 'query-free' });
+      if (cfg.keywords?.length) {
+        queries.push({ query: `${q} ${cfg.keywords.join(' ')}`, label: 'query-keywords' });
+      }
+      if (cfg.platforms?.length) {
+        for (const p of cfg.platforms.slice(0, 3)) {
+          const site = p.includes('.') ? p : `${p}.com`;
+          queries.push({ query: `${q} site:${site}`, label: `query-${site.split('.')[0]}` });
+        }
+      }
+      if (cfg.fileTypes?.length) {
+        for (const ft of cfg.fileTypes.slice(0, 2)) {
+          queries.push({ query: `${q} filetype:${ft}`, label: `query-${ft}` });
+        }
+      }
     }
 
     return queries.slice(0, max);
@@ -314,7 +384,11 @@ export class DorkProvider extends TramaProvider {
       ctx.seed.fullName ??
       (ctx.seed.firstName && ctx.seed.lastName
         ? `${ctx.seed.firstName} ${ctx.seed.lastName}`
-        : ctx.seed.username ?? null);
+        : ctx.seed.organization ??
+          ctx.seed.domain ??
+          ctx.seed.query ??
+          ctx.seed.username ??
+          null);
 
     if (name) {
       const ddg = await this.enrichWithDdg(name).catch(() => null);
