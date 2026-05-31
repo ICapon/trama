@@ -25,12 +25,6 @@ import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
 
 @Module({
   imports: [
-    BullModule.forRoot({
-      connection: {
-        host: process.env.REDIS_HOST ?? 'localhost',
-        port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
-      },
-    }),
     BullModule.registerQueue({ name: SCRAPER_QUEUE }),
     TypeOrmModule.forFeature([ScrapeJob, ScrapeResult]),
     GraphModule,

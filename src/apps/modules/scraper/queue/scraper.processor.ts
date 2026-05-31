@@ -7,10 +7,10 @@ import { ScrapeJobService } from '../scrape-job.service';
 import { ScrapeResultService } from '../scrape-result.service';
 import { ScrapeResultStatus } from '../scrape-result.entity';
 import { ProviderService } from '../../provider/provider.service';
-import { SCRAPER_QUEUE, SCRAPE_PERSON_JOB } from './scraper.queue';
+import { SCRAPER_QUEUE, SCRAPE_PERSON_JOB, SCRAPE_SCHEDULED_JOB } from './scraper.queue';
 import { TramaProvider } from '../../../../libs/providers';
 import { TRAMA_PROVIDERS_TOKEN } from '../providers/provider.registry';
-import type { ScrapeJobPayload } from '../scraper.types';
+import type { ScrapeJobPayload, ScheduledScrapePayload } from '../scraper.types';
 
 @Processor(SCRAPER_QUEUE)
 export class ScraperProcessor extends WorkerHost {
@@ -27,10 +27,36 @@ export class ScraperProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<ScrapeJobPayload>): Promise<void> {
-    if (job.name !== SCRAPE_PERSON_JOB) return;
+  async process(job: Job): Promise<void> {
+    if (job.name === SCRAPE_SCHEDULED_JOB) {
+      const data = job.data as ScheduledScrapePayload;
+      const record = await this.scrapeJobService.create({
+        entityId: data.entityId,
+        investigationId: data.investigationId,
+        source: data.source,
+        seed: data.seed,
+        config: data.config,
+      });
+      await this.scrapeJobService.markRunning(record.id, job.id!);
+      await this.executeScrape({ ...data, scrapeJobId: record.id });
+      return;
+    }
 
-    const { scrapeJobId, entityId, entityType, investigationId, source, seed, config } = job.data;
+    if (job.name === SCRAPE_PERSON_JOB) {
+      await this.executeScrape(job.data as ScrapeJobPayload);
+    }
+  }
+
+  private async executeScrape(opts: {
+    scrapeJobId: string;
+    entityId: string;
+    entityType: string;
+    investigationId: string;
+    source: string;
+    seed: ScrapeJobPayload['seed'];
+    config?: Record<string, unknown>;
+  }): Promise<void> {
+    const { scrapeJobId, entityId, entityType, investigationId, source, seed, config } = opts;
     const provider = this.providers.find((p) => p.source === source);
 
     if (!provider) {

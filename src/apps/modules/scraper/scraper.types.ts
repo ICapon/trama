@@ -9,3 +9,13 @@ export interface ScrapeJobPayload {
   seed: TramaProviderSeed;
   config?: Record<string, unknown>;
 }
+
+export interface ScheduledScrapePayload {
+  cronJobId: string;
+  entityId: string;
+  entityType: string;
+  investigationId: string;
+  source: string;
+  seed: TramaProviderSeed;
+  config?: Record<string, unknown>;
+}
