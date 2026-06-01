@@ -23,7 +23,7 @@ import {
   SEARCH_ENTITIES_BY_TEXT_QUERY,
   findNeighborsByDepthQuery,
 } from './queries/find-node.query';
-import type { CreateEntityInput, CreateRelationshipInput } from './graph.types';
+import type { CreateEntityInput, CreateRelationshipInput, GraphFilters } from './graph.types';
 import { toGraphEdgeResponse, toGraphNodeResponse } from '../../../libs/mappers/graph.mapper';
 import type { GraphEdgeResponse, GraphNodeResponse } from '../../../libs/schemas/graph-node-response.schema';
 
@@ -173,10 +173,11 @@ export class GraphService {
     return result.records[0]?.get('p') ?? null;
   }
 
-  async findGraphByNodeIds(ids: string[]): Promise<{ nodes: GraphNodeResponse[]; edges: GraphEdgeResponse[] }> {
+  async findGraphByNodeIds(ids: string[], filters?: GraphFilters): Promise<{ nodes: GraphNodeResponse[]; edges: GraphEdgeResponse[] }> {
     if (!ids.length) return { nodes: [], edges: [] };
 
-    const result = await this.neo4j.read(FIND_GRAPH_BY_NODE_IDS_QUERY, { ids });
+    const relTypes = filters?.relationshipTypes ?? [];
+    const result = await this.neo4j.read(FIND_GRAPH_BY_NODE_IDS_QUERY, { ids, relTypes });
 
     const nodeMap = new Map<string, GraphNodeResponse>();
     const edgeMap = new Map<string, GraphEdgeResponse>();

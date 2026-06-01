@@ -50,3 +50,9 @@ export interface CreateRelationshipInput {
   type: TramaRelationshipType;
   properties?: RelationshipProperties;
 }
+
+/** Extensible filter object passed to graph queries. */
+export interface GraphFilters {
+  /** Only return edges of these relationship types. Empty / undefined = no filter. */
+  relationshipTypes?: string[];
+}

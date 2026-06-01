@@ -64,9 +64,11 @@ export const DELETE_RELATIONSHIP_QUERY = `
 `;
 
 // Returns each root node with its direct neighbors and the connecting relationship.
+// Pass $relTypes = [] to return all relationship types (no filter).
 // Use findGraphByNodeIds() in GraphService to deduplicate and map the results.
 export const FIND_GRAPH_BY_NODE_IDS_QUERY = `
   MATCH (n:Entity) WHERE n.id IN $ids
   OPTIONAL MATCH (n)-[r]-(neighbor:Entity)
+  WHERE size($relTypes) = 0 OR type(r) IN $relTypes
   RETURN n, r, neighbor
 `;

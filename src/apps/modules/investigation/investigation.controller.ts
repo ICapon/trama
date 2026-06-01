@@ -43,9 +43,15 @@ export class InvestigationController {
   }
 
   @Get(':id/graph')
-  async getGraph(@Param('id') id: string) {
+  async getGraph(
+    @Param('id') id: string,
+    @Query('relTypes') relTypes?: string,
+  ) {
     const inv = await this.service.findOne(id, true);
-    return this.graphService.findGraphByNodeIds(inv.targetNodeIds);
+    const relationshipTypes = relTypes
+      ? relTypes.split(',').map((t) => t.trim()).filter(Boolean)
+      : undefined;
+    return this.graphService.findGraphByNodeIds(inv.targetNodeIds, { relationshipTypes });
   }
 
   @Put(':id')
