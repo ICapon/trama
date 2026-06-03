@@ -19,12 +19,21 @@ import {
 } from './investigation.service';
 import type { InvestigationViewState } from './investigation.entity';
 import { GraphService } from '../graph/graph.service';
+import { GraphConfigService } from './graph-config.service';
+import { ZodValidationPipe } from '../../../libs/pipes/zod-validation.pipe';
+import {
+  CreateGraphConfigSchema,
+  UpdateGraphConfigSchema,
+  type CreateGraphConfigDto,
+  type UpdateGraphConfigDto,
+} from '../../../libs/schemas/graph-config.schema';
 
 @Controller('investigations')
 export class InvestigationController {
   constructor(
     private readonly service: InvestigationService,
     private readonly graphService: GraphService,
+    private readonly graphConfigService: GraphConfigService,
   ) {}
 
   @Post()
@@ -80,5 +89,38 @@ export class InvestigationController {
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id') id: string) {
     return this.service.remove(id);
+  }
+
+  // ── Graph configs ──────────────────────────────────────────────────────────
+
+  @Get(':id/graph-configs')
+  listGraphConfigs(@Param('id') id: string) {
+    return this.graphConfigService.list(id);
+  }
+
+  @Post(':id/graph-configs')
+  createGraphConfig(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(CreateGraphConfigSchema)) dto: CreateGraphConfigDto,
+  ) {
+    return this.graphConfigService.create(id, dto);
+  }
+
+  @Patch(':id/graph-configs/:configId')
+  updateGraphConfig(
+    @Param('id') id: string,
+    @Param('configId') configId: string,
+    @Body(new ZodValidationPipe(UpdateGraphConfigSchema)) dto: UpdateGraphConfigDto,
+  ) {
+    return this.graphConfigService.update(id, configId, dto);
+  }
+
+  @Delete(':id/graph-configs/:configId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeGraphConfig(
+    @Param('id') id: string,
+    @Param('configId') configId: string,
+  ) {
+    return this.graphConfigService.remove(id, configId);
   }
 }
