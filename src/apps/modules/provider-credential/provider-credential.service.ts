@@ -101,6 +101,24 @@ export class ProviderCredentialService implements OnModuleInit {
     await this.repo.remove(credential);
   }
 
+  async upsert(providerSource: string, key: string, label: string, value: string): Promise<void> {
+    const existing = await this.repo.findOneBy({ providerSource, key });
+    if (existing) {
+      existing.encryptedValue = this.encrypt(value);
+      existing.label = label;
+      await this.repo.save(existing);
+    } else {
+      const credential = this.repo.create({
+        providerSource,
+        key,
+        label,
+        encryptedValue: this.encrypt(value),
+        isActive: true,
+      });
+      await this.repo.save(credential);
+    }
+  }
+
   async getDecryptedValue(providerSource: string, key: string): Promise<string | null> {
     const credential = await this.repo.findOneBy({ providerSource, key, isActive: true });
     if (!credential) return null;

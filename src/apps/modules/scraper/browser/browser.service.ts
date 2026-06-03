@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { chromium as chromiumExtra } from 'playwright-extra';
-import type { Browser, BrowserContext, Page } from 'playwright';
+import type { Browser, BrowserContext, Cookie, Page } from 'playwright';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 
@@ -74,6 +74,39 @@ export class BrowserService implements OnModuleDestroy {
     );
 
     return this.page;
+  }
+
+  async newIsolatedContext(options?: { cookies?: Cookie[]; proxyUrl?: string }): Promise<BrowserContext> {
+    const browser = await this.getBrowser();
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      locale: 'en-US',
+      viewport: { width: 1280, height: 800 },
+      extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
+      ...(options?.proxyUrl && { proxy: { server: options.proxyUrl } }),
+    });
+    if (options?.cookies?.length) {
+      // Normaliza el formato de sameSite — Cookie-Editor exporta "no_restriction"/null,
+      // Playwright requiere "Strict"|"Lax"|"None"
+      const SAME_SITE: Record<string, 'Strict' | 'Lax' | 'None'> = {
+        strict: 'Strict', lax: 'Lax', none: 'None', no_restriction: 'None', unspecified: 'Lax',
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const normalized = options.cookies.map((c: any) => ({
+        name:     c.name,
+        value:    c.value,
+        domain:   c.domain,
+        path:     c.path ?? '/',
+        expires:  c.expirationDate ?? c.expires ?? -1,
+        httpOnly: c.httpOnly ?? false,
+        secure:   c.secure ?? false,
+        sameSite: c.sameSite
+          ? (SAME_SITE[String(c.sameSite).toLowerCase()] ?? 'Lax')
+          : 'Lax',
+      }));
+      await context.addCookies(normalized);
+    }
+    return context;
   }
 
   async onModuleDestroy() {
