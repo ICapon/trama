@@ -63,12 +63,26 @@ export const DELETE_RELATIONSHIP_QUERY = `
   RETURN count(r) AS deleted
 `;
 
-// Returns each root node with its direct neighbors and the connecting relationship.
-// Pass $relTypes = [] to return all relationship types (no filter).
-// Use findGraphByNodeIds() in GraphService to deduplicate and map the results.
-export const FIND_GRAPH_BY_NODE_IDS_QUERY = `
-  MATCH (n:Entity) WHERE n.id IN $ids
-  OPTIONAL MATCH (n)-[r]-(neighbor:Entity)
-  WHERE size($relTypes) = 0 OR type(r) IN $relTypes
-  RETURN n, r, neighbor
-`;
+export type RelDirection = 'both' | 'outgoing' | 'incoming';
+
+// Returns all nodes within `depth` hops of any root node, plus all edges between them.
+// direction controls which way to follow edges during traversal from root nodes.
+// The inner OPTIONAL MATCH always returns edges in both directions between visible nodes.
+export function findGraphByNodeIdsQuery(depth: number, direction: RelDirection = 'both'): string {
+  const d = Math.min(Math.max(1, Math.trunc(depth)), 3);
+  const hop =
+    direction === 'outgoing' ? `-[*0..${d}]->` :
+    direction === 'incoming' ? `<-[*0..${d}]-` :
+                               `-[*0..${d}]-`;
+  return `
+    MATCH (root:Entity) WHERE root.id IN $ids
+    MATCH (root)${hop}(node:Entity)
+    WITH collect(DISTINCT node) AS allNodes
+    UNWIND allNodes AS n
+    OPTIONAL MATCH (n)-[r]-(neighbor:Entity)
+    WHERE neighbor IN allNodes
+      AND (size($relTypes) = 0 OR type(r) IN $relTypes)
+    RETURN DISTINCT n, r, neighbor
+    LIMIT 2000
+  `;
+}

@@ -9,6 +9,7 @@ import { InvestigationModule } from './apps/modules/investigation/investigation.
 import { ScraperModule } from './apps/modules/scraper/scraper.module';
 import { UploadModule } from './apps/modules/upload/upload.module';
 import { CronModule } from './apps/modules/cron/cron.module';
+import { ProviderCredentialModule } from './apps/modules/provider-credential/provider-credential.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { CronModule } from './apps/modules/cron/cron.module';
     ScraperModule,
     UploadModule,
     CronModule,
+    ProviderCredentialModule,
   ],
   controllers: [AppController],
   providers: [AppService],

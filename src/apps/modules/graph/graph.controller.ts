@@ -15,6 +15,13 @@ export class GraphController {
     return node;
   }
 
+  @Get('node/:id/social-analysis')
+  async getSocialAnalysis(@Param('id') id: string) {
+    const node = await this.graphService.findEntityById(id);
+    if (!node) throw new NotFoundException(`Node ${id} not found`);
+    return this.graphService.findSocialAnalysis(id);
+  }
+
   @Get('node/:id/neighbors')
   getNeighbors(
     @Param('id') id: string,

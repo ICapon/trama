@@ -15,14 +15,24 @@ import {
   FIND_ENTITIES_BY_TYPE_QUERY,
   FIND_ENTITIES_BY_VALUE_QUERY,
   FIND_ENTITY_BY_ID_QUERY,
-  FIND_GRAPH_BY_NODE_IDS_QUERY,
   FIND_NEIGHBORS_QUERY,
   FIND_NODE_RELATIONSHIPS_QUERY,
   FIND_SHORTEST_PATH_QUERY,
   DELETE_RELATIONSHIP_QUERY,
   SEARCH_ENTITIES_BY_TEXT_QUERY,
   findNeighborsByDepthQuery,
+  findGraphByNodeIdsQuery,
 } from './queries/find-node.query';
+import {
+  POST_METRICS_QUERY,
+  TOP_HASHTAGS_QUERY,
+  HASHTAG_COOCCURRENCE_QUERY,
+  TOP_DOMAINS_QUERY,
+  TOP_MENTIONS_QUERY,
+  TOP_REPLIES_QUERY,
+  TOP_RETWEETS_QUERY,
+  NETWORK_STATS_QUERY,
+} from './queries/social-analysis.query';
 import type { CreateEntityInput, CreateRelationshipInput, GraphFilters } from './graph.types';
 import { toGraphEdgeResponse, toGraphNodeResponse } from '../../../libs/mappers/graph.mapper';
 import type { GraphEdgeResponse, GraphNodeResponse } from '../../../libs/schemas/graph-node-response.schema';
@@ -176,9 +186,10 @@ export class GraphService {
   async findGraphByNodeIds(ids: string[], filters?: GraphFilters): Promise<{ nodes: GraphNodeResponse[]; edges: GraphEdgeResponse[] }> {
     if (!ids.length) return { nodes: [], edges: [] };
 
-    const relTypes = filters?.relationshipTypes ?? [];
-    const result = await this.neo4j.read(FIND_GRAPH_BY_NODE_IDS_QUERY, { ids, relTypes });
-
+    const relTypes  = filters?.relationshipTypes ?? [];
+    const depth     = filters?.depth     ?? 1;
+    const direction = filters?.direction ?? 'both';
+    const result = await this.neo4j.read(findGraphByNodeIdsQuery(depth, direction), { ids, relTypes });
     const nodeMap = new Map<string, GraphNodeResponse>();
     const edgeMap = new Map<string, GraphEdgeResponse>();
 
@@ -243,6 +254,144 @@ export class GraphService {
     if (deleted === 0) {
       throw new NotFoundException(`Relationship ${type} between ${fromId} and ${toId} not found`);
     }
+  }
+
+  async findSocialAnalysis(id: string) {
+    const [postRes, hashtagRes, cooccurRes, domainRes, mentionRes, replyRes, retweetRes, networkRes] =
+      await Promise.all([
+        this.neo4j.read(POST_METRICS_QUERY,           { id }),
+        this.neo4j.read(TOP_HASHTAGS_QUERY,           { id }),
+        this.neo4j.read(HASHTAG_COOCCURRENCE_QUERY,   { id }),
+        this.neo4j.read(TOP_DOMAINS_QUERY,            { id }),
+        this.neo4j.read(TOP_MENTIONS_QUERY,           { id }),
+        this.neo4j.read(TOP_REPLIES_QUERY,            { id }),
+        this.neo4j.read(TOP_RETWEETS_QUERY,           { id }),
+        this.neo4j.read(NETWORK_STATS_QUERY,          { id }),
+      ]);
+
+    // ── Post metrics ─────────────────────────────────────────────────────────
+    const pm = postRes.records[0];
+    const totalPosts    = pm?.get('totalPosts')?.toNumber()    ?? 0;
+    const avgLikes      = pm?.get('avgLikes')    ?? 0;
+    const avgRetweets   = pm?.get('avgRetweets') ?? 0;
+    const avgReplies    = pm?.get('avgReplies')  ?? 0;
+    const avgQuotes     = pm?.get('avgQuotes')   ?? 0;
+    const originalCount  = pm?.get('originalCount')?.toNumber()  ?? 0;
+    const retweetedCount = pm?.get('retweetedCount')?.toNumber() ?? 0;
+    const quotedCount    = pm?.get('quotedCount')?.toNumber()    ?? 0;
+    const repliedCount   = pm?.get('repliedCount')?.toNumber()   ?? 0;
+    const avgEngagement  = Number(avgLikes) + Number(avgRetweets) + Number(avgReplies) + Number(avgQuotes);
+
+    // ── Top lists ─────────────────────────────────────────────────────────────
+    const topHashtags = hashtagRes.records.map((r) => ({
+      tag:  r.get('tag')  as string,
+      freq: (r.get('freq') as { toNumber(): number }).toNumber(),
+    }));
+
+    const hashtagCooccurrence = cooccurRes.records.map((r) => ({
+      tagA:    r.get('tagA')   as string,
+      tagB:    r.get('tagB')   as string,
+      coFreq:  (r.get('coFreq') as { toNumber(): number }).toNumber(),
+    }));
+
+    const topDomains = domainRes.records.map((r) => ({
+      domain: r.get('domain') as string,
+      freq:   (r.get('freq') as { toNumber(): number }).toNumber(),
+    }));
+
+    const topMentions = mentionRes.records.map((r) => ({
+      handle: r.get('handle') as string,
+      freq:   (r.get('freq') as { toNumber(): number }).toNumber(),
+    }));
+
+    const topReplies = replyRes.records.map((r) => ({
+      handle: r.get('handle') as string,
+      freq:   (r.get('freq') as { toNumber(): number }).toNumber(),
+    }));
+
+    const topRetweets = retweetRes.records.map((r) => ({
+      handle: r.get('handle') as string,
+      freq:   (r.get('freq') as { toNumber(): number }).toNumber(),
+    }));
+
+    // ── Network ───────────────────────────────────────────────────────────────
+    const net = networkRes.records[0];
+    const followersInGraph  = net?.get('followersInGraph')?.toNumber()  ?? 0;
+    const followingInGraph  = net?.get('followingInGraph')?.toNumber()  ?? 0;
+
+    // ── Computed scores ───────────────────────────────────────────────────────
+    // These need properties stored on the SocialProfile node itself
+    const nodeRes = await this.neo4j.read(
+      `MATCH (n:Entity { id: $id }) RETURN n.followersCount AS fc, n.followingCount AS fwc, n.accountAgeDays AS age, n.tweetsCount AS tc, n.topActiveHours AS hours, n.avgTweetsPerDay AS tpd`,
+      { id },
+    );
+    const nr             = nodeRes.records[0];
+    const followersCount = Number(nr?.get('fc')   ?? 0);
+    const followingCount = Number(nr?.get('fwc')  ?? 0);
+    const accountAgeDays = Number(nr?.get('age')  ?? 0);
+    const tweetsCount    = Number(nr?.get('tc')   ?? 0);
+    const activeHours    = (nr?.get('hours') as number[] | null) ?? [];
+    const avgTweetsPerDay = Number(nr?.get('tpd') ?? 0);
+
+    const engagementRate = followersCount > 0
+      ? Math.round((avgEngagement / followersCount) * 10000) / 100   // percentage, 2 decimals
+      : null;
+
+    const amplificationRatio = totalPosts > 0
+      ? Math.round((retweetedCount / totalPosts) * 100)
+      : 0;
+
+    // Authenticity score 0–100
+    let authenticityScore = 50;
+    if (accountAgeDays > 365)  authenticityScore += 15;
+    else if (accountAgeDays < 30) authenticityScore -= 20;
+    const ratio = followingCount > 0 ? followersCount / followingCount : 0;
+    if (ratio >= 0.5 && ratio <= 50) authenticityScore += 10;
+    else if (ratio > 500 || (ratio < 0.05 && followersCount < 100)) authenticityScore -= 15;
+    if (engagementRate !== null && engagementRate >= 0.5) authenticityScore += 15;
+    else if (engagementRate !== null && engagementRate < 0.05 && followersCount > 10000) authenticityScore -= 10;
+    if (originalCount > 0 && totalPosts > 0 && (originalCount / totalPosts) >= 0.3) authenticityScore += 10;
+    if (activeHours.length >= 6) authenticityScore += 5;
+    else if (activeHours.length <= 2 && totalPosts > 20) authenticityScore -= 10;
+    authenticityScore = Math.min(100, Math.max(0, authenticityScore));
+
+    // Risk flags
+    const riskFlags: string[] = [];
+    if (amplificationRatio > 70)                                      riskFlags.push('high_amplification');
+    if (engagementRate !== null && engagementRate < 0.05 && followersCount > 10_000) riskFlags.push('low_engagement');
+    if (ratio > 200)                                                   riskFlags.push('abnormal_follower_ratio');
+    if (ratio < 0.05 && followersCount < 500)                         riskFlags.push('low_follow_back_rate');
+    if (accountAgeDays < 30)                                           riskFlags.push('new_account');
+    if (accountAgeDays > 365 && tweetsCount < 50)                     riskFlags.push('dormant_account');
+    if (activeHours.length <= 2 && totalPosts > 30)                   riskFlags.push('narrow_activity_window');
+    if (avgTweetsPerDay > 50)                                         riskFlags.push('very_high_posting_frequency');
+
+    // Estimated timezone from top active hours (rough UTC offset)
+    let estimatedTimezone: string | null = null;
+    if (activeHours.length > 0) {
+      const peakHour = activeHours[0];
+      // Most people are active 8am-10pm local → peak UTC maps to offset
+      const offset  = Math.round(12 - peakHour);
+      const absOff  = Math.abs(offset);
+      estimatedTimezone = offset >= 0 ? `UTC+${absOff}` : `UTC-${absOff}`;
+    }
+
+    return {
+      postMetrics: { totalPosts, avgLikes: Math.round(Number(avgLikes) * 10) / 10, avgRetweets: Math.round(Number(avgRetweets) * 10) / 10, avgReplies: Math.round(Number(avgReplies) * 10) / 10, avgEngagement: Math.round(avgEngagement * 10) / 10 },
+      contentBreakdown: { originalCount, retweetedCount, quotedCount, repliedCount },
+      engagementRate,
+      amplificationRatio,
+      topHashtags,
+      hashtagCooccurrence,
+      topDomains,
+      topMentions,
+      topReplies,
+      topRetweets,
+      networkInGraph: { followersInGraph, followingInGraph },
+      authenticityScore,
+      riskFlags,
+      estimatedTimezone,
+    };
   }
 
   async removeNode(id: string) {

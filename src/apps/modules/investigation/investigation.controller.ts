@@ -54,13 +54,21 @@ export class InvestigationController {
   @Get(':id/graph')
   async getGraph(
     @Param('id') id: string,
-    @Query('relTypes') relTypes?: string,
+    @Query('relTypes')   relTypes?:   string,
+    @Query('depth')      depth?:      string,
+    @Query('direction')  direction?:  string,
   ) {
     const inv = await this.service.findOne(id, true);
     const relationshipTypes = relTypes
       ? relTypes.split(',').map((t) => t.trim()).filter(Boolean)
       : undefined;
-    return this.graphService.findGraphByNodeIds(inv.targetNodeIds, { relationshipTypes });
+    const parsedDepth = depth ? parseInt(depth, 10) : 1;
+    const parsedDirection = (direction === 'outgoing' || direction === 'incoming') ? direction : 'both';
+    return this.graphService.findGraphByNodeIds(inv.targetNodeIds, {
+      relationshipTypes,
+      depth: parsedDepth,
+      direction: parsedDirection,
+    });
   }
 
   @Put(':id')

@@ -51,8 +51,14 @@ export interface CreateRelationshipInput {
   properties?: RelationshipProperties;
 }
 
+export type RelDirection = 'both' | 'outgoing' | 'incoming';
+
 /** Extensible filter object passed to graph queries. */
 export interface GraphFilters {
   /** Only return edges of these relationship types. Empty / undefined = no filter. */
   relationshipTypes?: string[];
+  /** How many hops to expand from the root nodes. Clamped to 1–3. Default: 1. */
+  depth?: number;
+  /** Direction to follow when expanding from root nodes. Default: 'both'. */
+  direction?: RelDirection;
 }

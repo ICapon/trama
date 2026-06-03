@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GraphModule } from '../graph/graph.module';
 import { ProviderModule } from '../provider/provider.module';
+import { ProviderCredentialModule } from '../provider-credential/provider-credential.module';
 import { ScraperController } from './scraper.controller';
 import { ScraperService } from './scraper.service';
 import { ScraperProcessor } from './queue/scraper.processor';
@@ -13,6 +14,7 @@ import { ScrapeResult } from './scrape-result.entity';
 import { CurpProvider } from './providers/curp.provider';
 import { SatRfcProvider } from './providers/sat-rfc.provider';
 import { XSocialProvider } from './providers/x-social.provider';
+import { XDeveloperProvider } from './providers/x/x-developer.provider';
 import { DorkProvider } from './providers/dork.provider';
 import { BrowserService } from './browser/browser.service';
 import { BraveEngine } from './browser/engines/brave.engine';
@@ -29,6 +31,7 @@ import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
     TypeOrmModule.forFeature([ScrapeJob, ScrapeResult]),
     GraphModule,
     ProviderModule,
+    ProviderCredentialModule,
   ],
   controllers: [ScraperController],
   providers: [
@@ -50,11 +53,12 @@ import { TRAMA_PROVIDERS_TOKEN } from './providers/provider.registry';
     CurpProvider,
     SatRfcProvider,
     XSocialProvider,
+    XDeveloperProvider,
     DorkProvider,
     {
       provide: TRAMA_PROVIDERS_TOKEN,
-      useFactory: (curp: CurpProvider, sat: SatRfcProvider, x: XSocialProvider, dork: DorkProvider) => [curp, sat, x, dork],
-      inject: [CurpProvider, SatRfcProvider, XSocialProvider, DorkProvider],
+      useFactory: (curp: CurpProvider, sat: SatRfcProvider, xSocial: XSocialProvider, xDev: XDeveloperProvider, dork: DorkProvider) => [curp, sat, xSocial, xDev, dork],
+      inject: [CurpProvider, SatRfcProvider, XSocialProvider, XDeveloperProvider, DorkProvider],
     },
   ],
   exports: [ScrapeJobService, ScrapeResultService],

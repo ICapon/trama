@@ -93,6 +93,10 @@ export const TRAMA_RELATIONSHIP_TYPES = [
   'MEMBER_OF_GROUP',
   'OWNS_PAGE',
   'OWNS_CHANNEL',
+  'FOLLOWS',
+  'REPLIED_TO',
+  'RETWEETED',
+  'QUOTED',
 
   // Evidence / Sources
   'HAS_EVIDENCE',
