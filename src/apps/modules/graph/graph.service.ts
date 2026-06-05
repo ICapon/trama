@@ -33,7 +33,8 @@ import {
   TOP_RETWEETS_QUERY,
   NETWORK_STATS_QUERY,
 } from './queries/social-analysis.query';
-import type { CreateEntityInput, CreateRelationshipInput, GraphFilters } from './graph.types';
+import type { CreateEntityInput, CreateRelationshipInput, GraphFilters, TramaNodeType } from './graph.types';
+import type { TramaRelationshipType } from './const/relationship-types.const';
 import { toGraphEdgeResponse, toGraphNodeResponse } from '../../../libs/mappers/graph.mapper';
 import type { GraphEdgeResponse, GraphNodeResponse } from '../../../libs/schemas/graph-node-response.schema';
 
@@ -412,5 +413,21 @@ export class GraphService {
     }
 
     if (affected.length) await this.investigationRepo.save(affected);
+  }
+
+  async createLinkedNode(anchorId: string, input: {
+    newNode: { type: TramaNodeType; properties?: Record<string, unknown> };
+    relationship: { type: TramaRelationshipType; direction: 'outgoing' | 'incoming' };
+  }) {
+    const newId = crypto.randomUUID();
+    await this.createEntity({ id: newId, type: input.newNode.type, properties: input.newNode.properties });
+
+    const fromId = input.relationship.direction === 'outgoing' ? anchorId : newId;
+    const toId   = input.relationship.direction === 'outgoing' ? newId    : anchorId;
+
+    const result = await this.createRelationship({ fromId, toId, type: input.relationship.type });
+
+    const newNode = await this.findEntityById(newId);
+    return { node: newNode, edge: result?.edge ?? null };
   }
 }

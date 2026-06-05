@@ -1,8 +1,10 @@
-import { Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, HttpCode, NotFoundException, Param, Patch, Post, Query } from '@nestjs/common';
 import { GraphService } from './graph.service';
 import { ZodValidationPipe } from '../../../libs/pipes/zod-validation.pipe';
 import { CreateNodeSchema, UpdateNodeSchema, type CreateNodeDto, type UpdateNodeDto } from '../../../libs/schemas/graph-node.schema';
 import { CreateRelationshipSchema, type CreateRelationshipDto } from '../../../libs/schemas/graph-relationship.schema';
+import type { TramaNodeType } from './graph.types';
+import type { TramaRelationshipType } from './const/relationship-types.const';
 
 @Controller('graph')
 export class GraphController {
@@ -38,6 +40,23 @@ export class GraphController {
     @Body(new ZodValidationPipe(UpdateNodeSchema)) dto: UpdateNodeDto,
   ) {
     return this.graphService.updateEntity(id, dto.properties);
+  }
+
+  @Post('node/:id/linked-node')
+  createLinkedNode(
+    @Param('id') id: string,
+    @Body() body: {
+      newNode: { type: string; label: string; properties?: Record<string, unknown> };
+      relationship: { type: string; direction: 'outgoing' | 'incoming' };
+    },
+  ) {
+    if (!body?.newNode?.type || !body?.relationship?.type) {
+      throw new BadRequestException('newNode.type and relationship.type are required');
+    }
+    return this.graphService.createLinkedNode(id, {
+      newNode: { type: body.newNode.type as TramaNodeType, properties: { ...body.newNode.properties, name: body.newNode.label } },
+      relationship: { type: body.relationship.type as TramaRelationshipType, direction: body.relationship.direction ?? 'outgoing' },
+    });
   }
 
   @Post('node')

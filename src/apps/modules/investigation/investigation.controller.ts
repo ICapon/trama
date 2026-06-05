@@ -14,6 +14,7 @@ import {
 import {
   AddTargetDto,
   CreateInvestigationDto,
+  ImportBundle,
   InvestigationService,
   UpdateInvestigationDto,
 } from './investigation.service';
@@ -39,6 +40,12 @@ export class InvestigationController {
   @Post()
   create(@Body() dto: CreateInvestigationDto) {
     return this.service.create(dto);
+  }
+
+  @Post('import')
+  @HttpCode(HttpStatus.CREATED)
+  importBundle(@Body() bundle: ImportBundle) {
+    return this.service.importBundle(bundle);
   }
 
   @Get()
