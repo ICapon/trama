@@ -10,6 +10,7 @@ import type {
 import type { TramaRelationshipType } from '../../../modules/graph/graph.types';
 import { SearchService } from '../browser/search.service';
 import { DorkSearchConfigSchema, type DorkSearchConfig } from '../../../../libs/schemas/scraper.schema';
+import { isProfileUrl, computeRelevance, type SearchResult } from './dork.relevance';
 
 // ─── Tipos internos ───────────────────────────────────────────────────────────
 
@@ -252,10 +253,13 @@ export class DorkProvider extends TramaProvider {
     return nodeType === 'SocialProfile' ? 'HAS_PROFILE' : 'HAS_FINDING';
   }
 
-  private nodeConfidence(nodeType: 'SocialProfile' | 'Document' | 'URL'): number {
-    if (nodeType === 'SocialProfile') return 0.7;
-    if (nodeType === 'Document') return 0.6;
-    return 0.5;
+  private nodeConfidence(
+    nodeType: 'SocialProfile' | 'Document' | 'URL',
+    relevance: number | null = null,
+  ): number {
+    const base = nodeType === 'SocialProfile' ? 0.7 : nodeType === 'Document' ? 0.6 : 0.5;
+    if (relevance === null) return base;
+    return parseFloat(Math.min(0.95, base + relevance * 0.2).toFixed(2));
   }
 
   // ─── Enriquecimiento: DDG Instant Answer ─────────────────────────────────
@@ -295,6 +299,8 @@ export class DorkProvider extends TramaProvider {
     const relationships: TramaProviderResult['relationships'] = [];
     const urlSeen = new Set<string>();
     const domainMap = new Map<string, string>();
+    const minRelevance = cfg.minRelevance ?? 0.15;
+    const maxResultsPerQuery = cfg.maxResultsPerQuery ?? 10;
 
     // ── Búsquedas ────────────────────────────────────────────────────────────
 
@@ -303,14 +309,19 @@ export class DorkProvider extends TramaProvider {
       const query = queries[i];
       this.logger.log(`[${query.label}] ${query.query}`);
 
-      let results: { url: string; title: string; snippet: string }[] = [];
+      let rawResults: SearchResult[] = [];
 
       try {
-        results = await this.search.search(query.query, 10, engine);
+        rawResults = await this.search.search(query.query, 10, engine);
       } catch (err) {
         this.logger.warn(`Query falló (${query.label}): ${String(err)}`);
         continue;
       }
+
+      const results = rawResults
+        .map((r) => ({ ...r, relevance: computeRelevance(r, ctx.seed) }))
+        .filter((r) => r.relevance === null || r.relevance >= minRelevance)
+        .slice(0, maxResultsPerQuery);
 
       for (const result of results) {
         if (urlSeen.has(result.url)) continue;
@@ -323,7 +334,9 @@ export class DorkProvider extends TramaProvider {
           continue;
         }
 
-        const nodeType = this.classifyUrl(result.url, query.label);
+        const rawType = this.classifyUrl(result.url, query.label);
+        const nodeType =
+          rawType === 'SocialProfile' && !isProfileUrl(result.url, hostname) ? 'URL' : rawType;
         const nodeId = randomUUID();
         const platform = nodeType === 'SocialProfile' ? this.detectPlatform(hostname) : undefined;
 
@@ -337,7 +350,7 @@ export class DorkProvider extends TramaProvider {
             description: result.snippet || undefined,
             source: this.source,
             sourceUrl: result.url,
-            confidence: this.nodeConfidence(nodeType),
+            confidence: this.nodeConfidence(nodeType, result.relevance),
             createdAt: now,
             dorkQuery: query.query,
             dorkLabel: query.label,

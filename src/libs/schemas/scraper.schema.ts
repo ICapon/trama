@@ -28,6 +28,8 @@ export const DorkSearchConfigSchema = z.object({
   platforms: z.array(z.string()).optional(),
   searchMode: z.enum(['general', 'identity', 'documents']).optional(),
   maxQueries: z.number().int().min(1).max(20).optional(),
+  maxResultsPerQuery: z.number().int().min(1).max(50).optional(),
+  minRelevance: z.number().min(0).max(1).optional(),
   delayMs: z.number().int().min(0).optional(),
 });
 
